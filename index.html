@@ -2134,15 +2134,16 @@
     window.currentTab = currentTab;
     window.currentUserId = null;
     window.updateDbFromFirebase = function(newDb) {
-      const localBgImage = db.settings.backgroundImage;
-      const localBgPreset = db.settings.backgroundPreset;
-      const localBgName = db.settings.backgroundName;
-      db = newDb;
-      db.settings.backgroundImage = localBgImage;
-      db.settings.backgroundPreset = localBgPreset;
-      db.settings.backgroundName = localBgName;
+      const remoteDb = coerceDbShape(newDb);
+      const mergedDb = mergeDbStates(db, remoteDb);
+      db = mergedDb;
       normalize();
       localStorage.setItem(KEY, JSON.stringify(db)); // bypass standard save to avoid echo
+      const mergedCloudStr = JSON.stringify(cloudComparableDb(mergedDb));
+      const remoteCloudStr = JSON.stringify(cloudComparableDb(remoteDb));
+      if (window.currentUserId && mergedCloudStr !== remoteCloudStr && window.firebaseSync) {
+        window.firebaseSync(mergedDb);
+      }
       render();
     };
     function uid() { return crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()) }
@@ -2212,7 +2213,59 @@
       const uploadCard = db.settings.backgroundImage ? `<button class="bgCard ${uploadActive ? 'active' : ''}" onclick="setBackgroundPreset('upload')"><div class="bgPreview" style="--bg-preview:url('${db.settings.backgroundImage}')"></div><div class="bgMeta"><div style="font-weight:700">Ảnh của bạn</div><small>${esc(db.settings.backgroundName || 'Ảnh tùy chỉnh')}</small></div></button>` : '';
       return `<div class="bgGrid">${BACKGROUND_PRESETS.map(bg => `<button class="bgCard ${bg.id === current ? 'active' : ''}" onclick="setBackgroundPreset('${bg.id}')"><div class="bgPreview" style="--bg-preview:${bg.preview}"></div><div class="bgMeta"><div style="font-weight:700">${bg.name}</div><small>${bg.note}</small></div></button>`).join('')}${uploadCard}</div>`;
     }
-    function defaultData() { return { tasks: [], events: seedEvents(), sessions: [], settings: { theme: 'github-light', accent: 'blue', availableStart: '07:00', availableEnd: '22:00', dailyMissionLimit: 3, notifications: false, backgroundPreset: 'none', backgroundImage: '', backgroundName: '' }, reviews: {} } }
+    const SETTINGS_DEFAULTS = { theme: 'github-light', accent: 'blue', availableStart: '07:00', availableEnd: '22:00', dailyMissionLimit: 3, notifications: false, backgroundPreset: 'none', backgroundImage: '', backgroundName: '' };
+    function defaultData() { return { tasks: [], events: seedEvents(), sessions: [], settings: { ...SETTINGS_DEFAULTS }, reviews: {} } }
+    function coerceDbShape(source = {}) {
+      return {
+        tasks: Array.isArray(source.tasks) ? source.tasks : [],
+        events: Array.isArray(source.events) ? source.events : [],
+        sessions: Array.isArray(source.sessions) ? source.sessions : [],
+        settings: Object.assign({}, SETTINGS_DEFAULTS, source.settings || {}),
+        reviews: source.reviews && typeof source.reviews === 'object' ? source.reviews : {}
+      };
+    }
+    function newestStamp(item) { return item?.updatedAt || item?.doneAt || item?.stackedAt || item?.createdAt || ''; }
+    function mergeById(localItems = [], remoteItems = []) {
+      const map = new Map();
+      const put = item => {
+        if (!item || typeof item !== 'object') return;
+        const key = item.id || uid();
+        const candidate = { ...item, id: key };
+        const existing = map.get(key);
+        if (!existing) { map.set(key, candidate); return; }
+        const currentStamp = newestStamp(existing);
+        const nextStamp = newestStamp(candidate);
+        if (nextStamp > currentStamp || (nextStamp === currentStamp && JSON.stringify(candidate).length > JSON.stringify(existing).length)) {
+          map.set(key, candidate);
+        }
+      };
+      remoteItems.forEach(put);
+      localItems.forEach(put);
+      return [...map.values()];
+    }
+    function mergeDbStates(localSource = {}, remoteSource = {}) {
+      const localDb = coerceDbShape(localSource);
+      const remoteDb = coerceDbShape(remoteSource);
+      const merged = {
+        tasks: mergeById(localDb.tasks, remoteDb.tasks),
+        events: mergeById(localDb.events, remoteDb.events),
+        sessions: mergeById(localDb.sessions, remoteDb.sessions),
+        settings: Object.assign({}, remoteDb.settings, localDb.settings),
+        reviews: Object.assign({}, remoteDb.reviews, localDb.reviews)
+      };
+      // Keep heavy background data local-only to avoid Firestore size issues.
+      merged.settings.backgroundImage = localDb.settings.backgroundImage || '';
+      merged.settings.backgroundName = localDb.settings.backgroundName || '';
+      merged.settings.backgroundPreset = localDb.settings.backgroundImage ? (localDb.settings.backgroundPreset || 'upload') : (remoteDb.settings.backgroundPreset || 'none');
+      return merged;
+    }
+    function cloudComparableDb(source = {}) {
+      const copy = JSON.parse(JSON.stringify(coerceDbShape(source)));
+      copy.settings.backgroundImage = '';
+      copy.settings.backgroundName = '';
+      copy.settings.backgroundPreset = 'none';
+      return copy;
+    }
     function load() { try { return Object.assign(defaultData(), JSON.parse(localStorage.getItem(KEY) || '{}')) } catch (e) { return defaultData() } }
     function save() {
       try {
@@ -2302,7 +2355,7 @@
         { id: uid(), title: 'Ngày Phụ nữ Việt Nam', type: 'solar', date: '2026-10-20', recurring: true, notes: '' }, { id: uid(), title: 'Ngày Nhà giáo Việt Nam', type: 'solar', date: '2026-11-20', recurring: true, notes: '' }, { id: uid(), title: 'Giáng sinh', type: 'solar', date: '2026-12-25', recurring: true, notes: '' }, { id: uid(), title: 'Ông Công Ông Táo', type: 'lunar', date: '2027-02-01', recurring: true, notes: '23 tháng Chạp âm lịch, tham khảo' },
         { id: uid(), title: 'Tết Nguyên Đán', type: 'lunar', date: '2027-02-06', recurring: true, notes: 'Mùng 1 Tết âm lịch, tham khảo' }]
     }
-    function normalize() { db.settings = Object.assign({ theme: 'github-light', accent: 'blue', availableStart: '07:00', availableEnd: '22:00', dailyMissionLimit: 3, notifications: false, backgroundPreset: 'none', backgroundImage: '', backgroundName: '' }, db.settings || {}); db.settings.theme = normalizeThemeId(db.settings.theme); if (db.settings.backgroundPreset === 'upload' && !db.settings.backgroundImage) db.settings.backgroundPreset = 'none'; if (!Array.isArray(db.tasks)) db.tasks = []; if (!Array.isArray(db.events)) db.events = seedEvents(); if (!Array.isArray(db.sessions)) db.sessions = []; db.tasks.forEach(t => { if (!t.id) t.id = uid(); if (t.done && t.status !== 'done') t.status = 'done'; if (!t.status) t.status = t.done ? 'done' : 'todo'; if (!t.createdAt) t.createdAt = new Date().toISOString(); if (!t.duration) t.duration = 60; ensureFlow(t); }); autoStackOld(); save(); }
+    function normalize() { db.settings = Object.assign({ ...SETTINGS_DEFAULTS }, db.settings || {}); db.settings.theme = normalizeThemeId(db.settings.theme); if (db.settings.backgroundPreset === 'upload' && !db.settings.backgroundImage) db.settings.backgroundPreset = 'none'; if (!Array.isArray(db.tasks)) db.tasks = []; if (!Array.isArray(db.events)) db.events = seedEvents(); if (!Array.isArray(db.sessions)) db.sessions = []; db.tasks.forEach(t => { if (!t.id) t.id = uid(); if (t.done && t.status !== 'done') t.status = 'done'; if (!t.status) t.status = t.done ? 'done' : 'todo'; if (!t.createdAt) t.createdAt = new Date().toISOString(); if (!t.duration) t.duration = 60; ensureFlow(t); }); autoStackOld(); }
     function autoStackOld() {
       const today = fmtDate(new Date());
       // Guard: chỉ auto-stack khi ngày thực sự thay đổi (tránh stack lúc 00:00 sai)
@@ -2443,7 +2496,7 @@
         }
       });
     }
-    function render() { window.currentTab = currentTab; applyBackground(); renderNav(); renderClock(); $('#pageTitle').textContent = tabs.find(t => t[0] === currentTab)[1]; $$('.section').forEach(s => s.classList.toggle('active', s.id === currentTab)); $('#selectedDate').value = selectedDate; ({ dashboard: renderDashboard, timeline: () => renderTimeline(true), tasks: renderTasks, focus: renderFocus, debt: renderDebt, calendar: renderCalendar, analytics: renderAnalytics, settings: renderSettings }[currentTab])(); renderInsight(); save() }
+    function render() { window.currentTab = currentTab; applyBackground(); renderNav(); renderClock(); $('#pageTitle').textContent = tabs.find(t => t[0] === currentTab)[1]; $$('.section').forEach(s => s.classList.toggle('active', s.id === currentTab)); $('#selectedDate').value = selectedDate; ({ dashboard: renderDashboard, timeline: () => renderTimeline(true), tasks: renderTasks, focus: renderFocus, debt: renderDebt, calendar: renderCalendar, analytics: renderAnalytics, settings: renderSettings }[currentTab])(); renderInsight() }
     function renderClock() { const n = new Date(); $('#clock').textContent = `${vnDays[n.getDay()]}, ${n.toLocaleDateString('vi-VN')}` }
     function updateNetworkStatus() { const online = navigator.onLine; const el = $('#netStatus'); if (el) el.innerHTML = `<span class="statusPill"><span class="statusDot ${online ? '' : 'offline'}"></span>${online ? 'Online' : 'Offline'}</span>` }
     function renderHomeClock(next) {
@@ -2677,7 +2730,6 @@
             ${flowListHTML(t, 'logs', 'Focus logs', false, true)}
           </div>
         </div>`;
-      save();
     }
     function flowListHTML(t, key, title, checklist = false, readonly = false) {
       const items = ensureFlow(t)[key] || [];
@@ -3223,6 +3275,7 @@
       const dbCopy = JSON.parse(JSON.stringify(localDb));
       // 🔥 Rất quan trọng: Không lưu ảnh nền (base64) lên cloud để tránh lố giới hạn 1MB của Firestore
       dbCopy.settings.backgroundImage = ''; 
+      dbCopy.settings.backgroundName = '';
       dbCopy.settings.backgroundPreset = 'none';
 
       const syncStr = JSON.stringify(dbCopy);
