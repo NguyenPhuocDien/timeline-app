@@ -2131,6 +2131,8 @@
     let undoStack = [], pendingFocusReview = null, analyticsPreviewDate = fmtDate(new Date());
     let taskFilters = { q: '', status: 'all', priority: 'all', tag: 'all', special: 'all' };
     let db = load();
+    window.currentTab = currentTab;
+    window.currentUserId = null;
     window.updateDbFromFirebase = function(newDb) {
       const localBgImage = db.settings.backgroundImage;
       const localBgPreset = db.settings.backgroundPreset;
@@ -2441,7 +2443,7 @@
         }
       });
     }
-    function render() { applyBackground(); renderNav(); renderClock(); $('#pageTitle').textContent = tabs.find(t => t[0] === currentTab)[1]; $$('.section').forEach(s => s.classList.toggle('active', s.id === currentTab)); $('#selectedDate').value = selectedDate; ({ dashboard: renderDashboard, timeline: () => renderTimeline(true), tasks: renderTasks, focus: renderFocus, debt: renderDebt, calendar: renderCalendar, analytics: renderAnalytics, settings: renderSettings }[currentTab])(); renderInsight(); save() }
+    function render() { window.currentTab = currentTab; applyBackground(); renderNav(); renderClock(); $('#pageTitle').textContent = tabs.find(t => t[0] === currentTab)[1]; $$('.section').forEach(s => s.classList.toggle('active', s.id === currentTab)); $('#selectedDate').value = selectedDate; ({ dashboard: renderDashboard, timeline: () => renderTimeline(true), tasks: renderTasks, focus: renderFocus, debt: renderDebt, calendar: renderCalendar, analytics: renderAnalytics, settings: renderSettings }[currentTab])(); renderInsight(); save() }
     function renderClock() { const n = new Date(); $('#clock').textContent = `${vnDays[n.getDay()]}, ${n.toLocaleDateString('vi-VN')}` }
     function updateNetworkStatus() { const online = navigator.onLine; const el = $('#netStatus'); if (el) el.innerHTML = `<span class="statusPill"><span class="statusDot ${online ? '' : 'offline'}"></span>${online ? 'Online' : 'Offline'}</span>` }
     function renderHomeClock(next) {
@@ -3013,7 +3015,7 @@
       return html;
     }
     function renderSettings() {
-      const loginHtml = (typeof currentUserId !== 'undefined' && currentUserId) ? 
+      const loginHtml = window.currentUserId ? 
         `<button class="btn secondary" onclick="window.firebaseLogout ? window.firebaseLogout() : null">Đăng xuất</button><span class="muted small" style="margin-left: 12px">Đã đồng bộ</span>` : 
         `<button class="btn ok" onclick="window.firebaseLogin ? window.firebaseLogin() : toast('⚠️ Vui lòng cấu hình firebaseConfig trước!')">&#128273; Đăng nhập Đồng bộ</button>`;
 
@@ -3144,7 +3146,6 @@
       console.error("Firebase init error:", e);
     }
 
-    let currentUserId = null;
     let unsubscribeSnapshot = null;
     let isSyncing = false;
     let lastSyncDataStr = "";
@@ -3179,14 +3180,14 @@
       onAuthStateChanged(auth, user => {
         const btn = document.getElementById('loginBtn');
         if (user) {
-          currentUserId = user.uid;
+          window.currentUserId = user.uid;
           if (btn) btn.innerHTML = `👤 ${user.displayName.split(' ')[0]} (Đăng xuất)`;
           if (btn) btn.onclick = window.firebaseLogout;
           toast("✅ Đã kết nối Cloud: " + user.email);
-          if (currentTab === 'settings') render();
+          if (window.currentTab === 'settings') render();
           
           // Lắng nghe dữ liệu realtime từ Firestore
-          const docRef = doc(dbFire, "users", currentUserId);
+          const docRef = doc(dbFire, "users", window.currentUserId);
           unsubscribeSnapshot = onSnapshot(docRef, (docSnap) => {
             if (isSyncing) return; // Đang đẩy data lên, bỏ qua pull
             if (!docSnap.exists() || !docSnap.data()?.db) {
@@ -3201,14 +3202,14 @@
               if (window.updateDbFromFirebase) window.updateDbFromFirebase(data.db);
             }
           });
-          
+            
         } else {
-          currentUserId = null;
+          window.currentUserId = null;
           lastSyncDataStr = "";
           if (unsubscribeSnapshot) unsubscribeSnapshot();
           if (btn) btn.innerHTML = `&#128273; Đăng nhập Đồng bộ`;
           if (btn) btn.onclick = window.firebaseLogin;
-          if (currentTab === 'settings') render();
+          if (window.currentTab === 'settings') render();
         }
       });
     } else {
@@ -3217,7 +3218,7 @@
     }
 
     window.firebaseSync = (localDb) => {
-      if (!currentUserId || !dbFire) return;
+      if (!window.currentUserId || !dbFire) return;
       
       const dbCopy = JSON.parse(JSON.stringify(localDb));
       // 🔥 Rất quan trọng: Không lưu ảnh nền (base64) lên cloud để tránh lố giới hạn 1MB của Firestore
@@ -3230,7 +3231,7 @@
       isSyncing = true;
       lastSyncDataStr = syncStr;
       
-      setDoc(doc(dbFire, "users", currentUserId), { db: dbCopy }).then(() => {
+      setDoc(doc(dbFire, "users", window.currentUserId), { db: dbCopy }).then(() => {
         isSyncing = false;
       }).catch(err => {
         console.error("Firebase Sync error:", err);
