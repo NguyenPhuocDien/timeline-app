@@ -1,0 +1,1692 @@
+<!doctype html>
+<html lang="vi">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Timeline Focus - Personal Planner</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#2563eb">
+  <style>
+    /* =============================================
+       LEAN PRODUCTIVITY UI - flat, compact, clean
+       Inspired by Todoist + Google Calendar + Notion
+    ============================================= */
+    :root {
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --panel2: #f3f4f6;
+      --muted: #6b7280;
+      --text: #111827;
+      --text2: #374151;
+      --line: #e5e7eb;
+      --line2: #d1d5db;
+      --brand: #2563eb;
+      --brand2: #1d4ed8;
+      --brand-light: #eff6ff;
+      --ok: #16a34a;
+      --ok-light: #f0fdf4;
+      --warn: #d97706;
+      --warn-light: #fffbeb;
+      --bad: #dc2626;
+      --bad-light: #fef2f2;
+      --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+      --shadow-md: 0 4px 6px rgba(0,0,0,.05), 0 2px 4px rgba(0,0,0,.04);
+      --r: 8px;
+      --r-sm: 6px;
+      --h: 64px;
+      --side: 220px;
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    }
+
+    [data-theme="github-light"] {
+      --bg: #f6f8fa;
+      --panel: #ffffff;
+      --panel2: #f0f3f6;
+      --muted: #57606a;
+      --text: #24292f;
+      --text2: #3b434b;
+      --line: #d8dee4;
+      --line2: #afb8c1;
+      --brand: #0969da;
+      --brand2: #0550ae;
+      --brand-light: #ddf4ff;
+      --ok: #1a7f37;
+      --ok-light: #dafbe1;
+      --warn: #9a6700;
+      --warn-light: #fff8c5;
+      --bad: #cf222e;
+      --bad-light: #ffebe9;
+    }
+
+    [data-theme="vscode-dark"] {
+      --bg: #1e1e1e;
+      --panel: #252526;
+      --panel2: #2d2d30;
+      --muted: #9da3ad;
+      --text: #d4d4d4;
+      --text2: #c7c7c7;
+      --line: #3c3c3c;
+      --line2: #555555;
+      --brand: #3794ff;
+      --brand2: #0078d4;
+      --brand-light: #12395c;
+      --ok: #6a9955;
+      --ok-light: #193619;
+      --warn: #d7ba7d;
+      --warn-light: #3d321c;
+      --bad: #f44747;
+      --bad-light: #4a1f1f;
+      --shadow: none;
+      --shadow-md: 0 8px 18px rgba(0,0,0,.25);
+    }
+
+    [data-theme="vscode-dark-plus"] {
+      --bg: #181818;
+      --panel: #1f1f1f;
+      --panel2: #2a2a2a;
+      --muted: #a6a6a6;
+      --text: #cccccc;
+      --text2: #d7d7d7;
+      --line: #333333;
+      --line2: #4d4d4d;
+      --brand: #4fc1ff;
+      --brand2: #3794ff;
+      --brand-light: #102f44;
+      --ok: #89d185;
+      --ok-light: #18371e;
+      --warn: #cca700;
+      --warn-light: #3a3110;
+      --bad: #f14c4c;
+      --bad-light: #4d1f24;
+      --shadow: none;
+      --shadow-md: 0 8px 18px rgba(0,0,0,.28);
+    }
+
+    [data-theme="one-dark-pro"] {
+      --bg: #21252b;
+      --panel: #282c34;
+      --panel2: #2c313a;
+      --muted: #abb2bf;
+      --text: #d7dae0;
+      --text2: #c8ccd4;
+      --line: #3e4451;
+      --line2: #4b5263;
+      --brand: #61afef;
+      --brand2: #528bff;
+      --brand-light: #1e3a56;
+      --ok: #98c379;
+      --ok-light: #253b22;
+      --warn: #e5c07b;
+      --warn-light: #3d321f;
+      --bad: #e06c75;
+      --bad-light: #4a272b;
+      --shadow: none;
+      --shadow-md: 0 8px 20px rgba(0,0,0,.25);
+    }
+
+    [data-theme="dracula"] {
+      --bg: #282a36;
+      --panel: #2f3240;
+      --panel2: #383a4a;
+      --muted: #b6b6c9;
+      --text: #f8f8f2;
+      --text2: #e9e9f4;
+      --line: #44475a;
+      --line2: #6272a4;
+      --brand: #8be9fd;
+      --brand2: #50fa7b;
+      --brand-light: #173b45;
+      --ok: #50fa7b;
+      --ok-light: #1e4429;
+      --warn: #f1fa8c;
+      --warn-light: #454620;
+      --bad: #ff5555;
+      --bad-light: #4a2328;
+      --shadow: none;
+      --shadow-md: 0 8px 20px rgba(0,0,0,.25);
+    }
+
+    [data-theme="monokai"] {
+      --bg: #272822;
+      --panel: #2f3129;
+      --panel2: #383a31;
+      --muted: #c2c2b0;
+      --text: #f8f8f2;
+      --text2: #e6e6dc;
+      --line: #49483e;
+      --line2: #676655;
+      --brand: #66d9ef;
+      --brand2: #a6e22e;
+      --brand-light: #173c43;
+      --ok: #a6e22e;
+      --ok-light: #2e4219;
+      --warn: #e6db74;
+      --warn-light: #443f1e;
+      --bad: #f92672;
+      --bad-light: #4a1f2d;
+      --shadow: none;
+      --shadow-md: 0 8px 20px rgba(0,0,0,.25);
+    }
+
+    [data-theme="solarized-light"] {
+      --bg: #fdf6e3;
+      --panel: #fffaf0;
+      --panel2: #eee8d5;
+      --muted: #657b83;
+      --text: #073642;
+      --text2: #586e75;
+      --line: #d7cfb7;
+      --line2: #bdb59f;
+      --brand: #268bd2;
+      --brand2: #2aa198;
+      --brand-light: #e1f2f4;
+      --ok: #859900;
+      --ok-light: #eef2cf;
+      --warn: #b58900;
+      --warn-light: #f5edcf;
+      --bad: #dc322f;
+      --bad-light: #f8ddda;
+    }
+
+    [data-theme="system"] {
+      color-scheme: light dark;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      [data-theme="system"] {
+        --bg: #1e1e1e;
+        --panel: #252526;
+        --panel2: #2d2d30;
+        --muted: #9da3ad;
+        --text: #d4d4d4;
+        --text2: #c7c7c7;
+        --line: #3c3c3c;
+        --line2: #555555;
+        --brand: #3794ff;
+        --brand2: #0078d4;
+        --brand-light: #12395c;
+        --ok: #6a9955;
+        --ok-light: #193619;
+        --warn: #d7ba7d;
+        --warn-light: #3d321c;
+        --bad: #f44747;
+        --bad-light: #4a1f1f;
+        --shadow: none;
+        --shadow-md: 0 8px 18px rgba(0,0,0,.25);
+      }
+    }
+
+    /* ---- Reset & Base ---- */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, select, textarea { font: inherit; }
+    button { border: 0; cursor: pointer; color: var(--text); background: transparent; }
+
+    /* ---- App Shell - 2 columns, no gap ---- */
+    .app {
+      display: grid;
+      grid-template-columns: var(--side) minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    /* ---- Sidebar ---- */
+    .side {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      padding: 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sideBrand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 14px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .sideBrand img {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+      border-radius: 6px;
+    }
+
+    .sideBrandText { flex: 1; min-width: 0; }
+
+    .logo {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+
+    .nav {
+      flex: 1;
+      padding: 10px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      overflow-y: auto;
+    }
+
+    .nav button {
+      width: 100%;
+      text-align: left;
+      padding: 8px 10px;
+      border-radius: var(--r-sm);
+      color: var(--muted);
+      font-size: 13.5px;
+      font-weight: 500;
+      transition: background 0.1s, color 0.1s;
+    }
+
+    .nav button.active {
+      background: var(--brand-light);
+      color: var(--brand);
+      font-weight: 600;
+    }
+
+    .nav button:hover:not(.active) {
+      background: var(--panel2);
+      color: var(--text);
+    }
+
+    .sideActions {
+      padding: 10px 8px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .sideActions .btn {
+      font-size: 12px;
+      padding: 7px 10px;
+      justify-content: flex-start;
+    }
+
+    /* ---- Main ---- */
+    .main {
+      background: var(--bg);
+      padding: 0;
+      min-height: 100vh;
+    }
+
+    /* ---- Insight (hidden by default, shown as panel inside dashboard) ---- */
+    .insight { display: none !important; }
+
+    /* ---- Top bar ---- */
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 24px 14px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.4px;
+      color: var(--text);
+    }
+
+    .clock {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    /* ---- Section content padding ---- */
+    .section { display: none; padding: 20px 24px; }
+    .section.active { display: block; }
+
+    /* ---- Buttons ---- */
+    .btn {
+      background: var(--brand);
+      color: #fff;
+      padding: 7px 12px;
+      border-radius: var(--r-sm);
+      font-weight: 600;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s, opacity 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn:hover { background: var(--brand2); }
+
+    .btn.secondary {
+      background: var(--panel);
+      color: var(--text2);
+      border: 1px solid var(--line2);
+    }
+
+    .btn.secondary:hover { background: var(--panel2); }
+
+    .btn.ghost {
+      background: transparent;
+      color: var(--text2);
+      border: 1px solid var(--line);
+    }
+
+    .btn.ghost:hover { background: var(--panel2); }
+
+    .btn.ok { background: var(--ok); }
+    .btn.ok:hover { background: #15803d; }
+
+    .btn.warn { background: var(--warn); color: #fff; }
+    .btn.warn:hover { background: #b45309; }
+
+    .btn.bad { background: var(--bad); }
+    .btn.bad:hover { background: #b91c1c; }
+
+    .btn.sm {
+      padding: 5px 9px;
+      font-size: 12px;
+      border-radius: 5px;
+    }
+
+    /* ---- Cards & Layout helpers ---- */
+    .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .grid { display: grid; gap: 12px; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .card h3 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .big {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      line-height: 1.2;
+    }
+
+    .muted { color: var(--muted); }
+    .small { font-size: 12px; }
+
+    /* ---- Progress bar ---- */
+    .bar {
+      height: 5px;
+      border-radius: 999px;
+      background: var(--panel2);
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .bar > i {
+      display: block;
+      height: 100%;
+      background: var(--brand);
+      border-radius: 999px;
+      transition: width 0.3s ease;
+    }
+
+    /* ---- Quick add bar ---- */
+    .quick {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    /* ---- Inputs ---- */
+    .input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line2);
+      background: var(--panel);
+      color: var(--text);
+      padding: 7px 10px;
+      border-radius: var(--r-sm);
+      outline: none;
+      font-size: 13.5px;
+      transition: border-color 0.15s;
+    }
+
+    .input:focus, select:focus, textarea:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+    }
+
+    textarea { min-height: 80px; resize: vertical; }
+
+    /* ---- Pills & Badges ---- */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 4px 9px;
+      border-radius: var(--r-sm);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .badge {
+      font-size: 11px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 2px 7px;
+      color: var(--muted);
+      background: var(--panel2);
+      font-weight: 500;
+    }
+
+    .badge.high { background: var(--bad-light); color: var(--bad); border-color: #fecaca; }
+    .badge.medium { background: var(--brand-light); color: var(--brand); border-color: #bfdbfe; }
+    .badge.low { background: var(--ok-light); color: var(--ok); border-color: #bbf7d0; }
+
+    /* ---- Split layout ---- */
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 16px;
+    }
+
+    /* ---- Timeline ---- */
+    .timelineWrap {
+      position: relative;
+      border-top: 1px solid var(--line);
+      height: calc(24 * var(--h));
+      margin-top: 8px;
+      background: var(--panel);
+      border-radius: var(--r);
+      border: 1px solid var(--line);
+      overflow: hidden;
+    }
+
+    .hour {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: var(--h);
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 56px 1fr;
+    }
+
+    .hourLabel {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 500;
+      padding: 6px 8px;
+      border-right: 1px solid var(--line);
+      user-select: none;
+    }
+
+    .hourArea { position: relative; }
+    .hourArea:hover { background: rgba(37,99,235,.03); }
+
+    /* ---- NOW line ---- */
+    .nowLine {
+      position: absolute;
+      left: 56px;
+      right: 0;
+      height: 2px;
+      background: var(--bad);
+      z-index: 8;
+    }
+
+    .nowLine::before {
+      content: 'NOW';
+      position: absolute;
+      left: -46px;
+      top: -9px;
+      background: var(--bad);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 3px;
+      padding: 2px 5px;
+      letter-spacing: 0.5px;
+    }
+
+    /* ---- Task blocks (flat, left-border accent) ---- */
+    .tblock {
+      position: absolute;
+      left: 64px;
+      right: 10px;
+      background: var(--brand-light);
+      border: 1px solid #bfdbfe;
+      border-left: 3px solid var(--brand);
+      border-radius: var(--r-sm);
+      padding: 5px 8px;
+      overflow: hidden;
+      z-index: 3;
+      cursor: pointer;
+      transition: box-shadow 0.15s;
+    }
+
+    .tblock:hover { box-shadow: var(--shadow-md); }
+
+    .tblock.high {
+      background: var(--bad-light);
+      border-color: #fecaca;
+      border-left-color: var(--bad);
+    }
+
+    .tblock.medium {
+      background: var(--brand-light);
+      border-color: #bfdbfe;
+      border-left-color: var(--brand);
+    }
+
+    .tblock.low {
+      background: #f9fafb;
+      border-color: var(--line);
+      border-left-color: var(--muted);
+    }
+
+    .tblock.overlap { outline: 2px solid var(--warn); outline-offset: 1px; }
+
+    .tblock.done {
+      opacity: 0.5;
+      text-decoration: line-through;
+    }
+
+    .tblock .name {
+      font-weight: 600;
+      font-size: 12.5px;
+      color: var(--text);
+      line-height: 1.3;
+    }
+
+    .tblock .meta {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    /* ---- Task list ---- */
+    .list { display: grid; gap: 8px; }
+
+    .task {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      padding: 12px 14px;
+      display: grid;
+      gap: 6px;
+      transition: box-shadow 0.15s;
+    }
+
+    .task:hover { box-shadow: var(--shadow-md); }
+
+    .taskTop {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .taskTitle { font-weight: 600; font-size: 13.5px; }
+
+    /* ---- Calendar ---- */
+    .calendar {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+    }
+
+    .dow {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 0 6px 6px;
+    }
+
+    .day {
+      min-height: 90px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      padding: 8px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      transition: border-color 0.15s;
+    }
+
+    .day:hover { border-color: var(--brand); }
+    .day.sel { border-color: var(--brand); background: var(--brand-light); }
+    .day.off { opacity: 0.35; }
+    .day .num { font-weight: 700; font-size: 15px; }
+
+    .dots { display: flex; gap: 3px; margin-top: auto; flex-wrap: wrap; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
+
+    /* ---- Modals ---- */
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: flex-start;
+      justify-content: center;
+      background: rgba(0,0,0,.35);
+      z-index: 50;
+      overflow: auto;
+      padding: 40px 12px;
+    }
+
+    .modal.open { display: flex; }
+
+    .dialog {
+      width: min(820px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      padding: 20px;
+      box-shadow: var(--shadow-md);
+    }
+
+    .dialog.detail {
+      width: min(960px, 100%);
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .detailHead {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .detailBody {
+      padding: 18px 20px 20px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr);
+      gap: 16px;
+    }
+
+    .flowSection {
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      background: var(--panel);
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .flowSection h3 {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+
+    .flowItem {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 8px;
+      align-items: start;
+      padding: 7px 0;
+      border-top: 1px solid var(--line);
+      font-size: 13px;
+    }
+
+    .flowItem:first-of-type { border-top: 0; }
+    .flowItem.done span { color: var(--muted); text-decoration: line-through; }
+
+    .flowAdd {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    /* ---- Form ---- */
+    .form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .form .full { grid-column: 1 / -1; }
+
+    .form label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .checks { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+
+    /* ---- Tables ---- */
+    .table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .table th, .table td { border-bottom: 1px solid var(--line); padding: 10px 12px; text-align: left; }
+    .table th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; background: var(--panel2); }
+    .table tr:hover td { background: var(--panel2); }
+
+    /* ---- Triage ---- */
+    .triageHero {
+      background: var(--warn-light);
+      border: 1px solid #fde68a;
+      border-radius: var(--r);
+      padding: 16px;
+      margin: 12px 0;
+    }
+
+    /* ---- Analytics chart ---- */
+    .chart {
+      height: 120px;
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      border-bottom: 1px solid var(--line);
+      padding: 8px 0;
+    }
+
+    .barv {
+      flex: 1;
+      background: var(--brand);
+      opacity: 0.75;
+      border-radius: 4px 4px 0 0;
+      min-height: 4px;
+      transition: height 0.3s;
+    }
+
+    /* ---- Toast ---- */
+    .toast {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--text);
+      color: #fff;
+      padding: 9px 16px;
+      border-radius: var(--r-sm);
+      display: none;
+      z-index: 60;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: var(--shadow-md);
+    }
+
+    .toast.show { display: block; animation: fadeUp 0.2s ease; }
+
+    .toast button {
+      color: #fff;
+      font-weight: 700;
+      margin-left: 12px;
+      text-decoration: underline;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* ---- Mobile tabs ---- */
+    .mobileTabs { display: none; }
+
+    /* ---- Text utilities ---- */
+    .dangerText { color: var(--bad); }
+    .okText { color: var(--ok); }
+    .warnText { color: var(--warn); }
+
+    .statusDot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+      background: var(--ok);
+      margin-right: 6px;
+    }
+
+    .statusDot.offline { background: var(--bad); }
+
+    /* ---- Dashboard specific ---- */
+    .cmd {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .recommend {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      padding: 14px 16px;
+    }
+
+    .recommend ol { margin: 8px 0 0; padding-left: 18px; }
+    .recommend li { margin: 5px 0; color: var(--text2); font-size: 13px; }
+
+    .eventPlan { border-left: 3px solid var(--brand); padding-left: 10px; margin-top: 6px; }
+
+    .homeClock {
+      display: grid;
+      gap: 12px;
+      justify-items: center;
+      text-align: center;
+    }
+
+    .clockRing {
+      width: 172px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: conic-gradient(var(--brand) var(--clock-pct, 0%), var(--panel2) 0);
+      position: relative;
+    }
+
+    .clockRing::before {
+      content: '';
+      position: absolute;
+      inset: 10px;
+      border-radius: 50%;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .clockCenter {
+      position: relative;
+      display: grid;
+      gap: 2px;
+    }
+
+    .clockTime {
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: 0;
+      line-height: 1;
+    }
+
+    .clockDate {
+      font-size: 12px;
+      color: var(--muted);
+      max-width: 132px;
+    }
+
+    .filterBar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) 140px 140px 140px 140px;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .themeGrid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .themeCard {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: var(--r);
+      padding: 10px;
+      text-align: left;
+      display: grid;
+      gap: 8px;
+    }
+
+    .themeCard.active {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent);
+    }
+
+    .swatches {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 4px;
+    }
+
+    .swatches i {
+      height: 18px;
+      border-radius: 4px;
+      border: 1px solid rgba(0,0,0,.12);
+    }
+
+    /* ---- Responsive ---- */
+    @media (max-width: 1180px) {
+      .app { grid-template-columns: 200px minmax(0, 1fr); }
+      .cards { grid-template-columns: repeat(2, 1fr); }
+      .split, .cmd { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 780px) {
+      :root { --h: 56px; }
+      body { padding-bottom: 60px; }
+      .app { display: block; }
+      .side { display: none; }
+      .main { min-height: auto; }
+      .top { padding: 12px 16px; position: sticky; }
+      .section { padding: 14px 16px; }
+
+      .mobileTabs {
+        display: grid;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--panel);
+        border-top: 1px solid var(--line);
+        grid-template-columns: repeat(5, 1fr);
+        z-index: 40;
+      }
+
+      .mobileTabs button {
+        background: transparent;
+        color: var(--muted);
+        padding: 10px 4px 8px;
+        font-size: 11px;
+        font-weight: 500;
+        min-height: 52px;
+      }
+
+      .mobileTabs button.active {
+        color: var(--brand);
+        background: var(--brand-light);
+      }
+
+      /* Mobile touch targets */
+      .btn.sm { min-height: 44px; min-width: 44px; padding: 10px 12px; }
+
+      .quick { grid-template-columns: 1fr; }
+      .filterBar { grid-template-columns: 1fr 1fr; }
+      .cards { grid-template-columns: 1fr; }
+      .themeGrid { grid-template-columns: 1fr 1fr; }
+      .form { grid-template-columns: 1fr; }
+      .timelineWrap { height: calc(24 * var(--h)); }
+      .hour { height: 56px; grid-template-columns: 46px 1fr; }
+      .tblock { left: 52px; }
+      .nowLine { left: 46px; }
+      .calendar { gap: 4px; }
+      .day { min-height: 70px; padding: 6px; }
+      .day .num { font-size: 14px; }
+      .h1 { font-size: 18px; }
+      .dialog { padding: 14px; }
+      .table { font-size: 12px; }
+      .top { flex-wrap: wrap; gap: 8px; }
+      .split { grid-template-columns: 1fr; }
+      .detailBody { grid-template-columns: 1fr; padding: 14px; }
+      .detailHead { padding: 14px; }
+      .flowAdd { grid-template-columns: 1fr; }
+    }
+  </style>
+
+</head>
+
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="sideBrand">
+        <img src="img/campus-logo.png" alt="IUH Logo" onerror="this.style.display='none'">
+        <div class="sideBrandText">
+          <div class="logo">Timeline Focus</div>
+          <div class="sub">Personal planner</div>
+        </div>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div class="sideActions">
+        <button class="btn secondary" id="exportBtn">Xuất dữ liệu</button>
+        <button class="btn secondary" id="importBtn">Nhập dữ liệu</button>
+        <button class="btn secondary" id="themeBtn">Đổi giao diện</button>
+        <button class="btn secondary" id="notifyBtn">Bật thông báo</button>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="top">
+        <div>
+          <div class="h1" id="pageTitle">Dashboard</div>
+          <div class="clock" id="clock"></div>
+          <div class="clock" id="netStatus"></div>
+        </div>
+        <div class="row"><input class="input" type="date" id="selectedDate" style="width:170px"><button class="btn"
+            id="openTaskBtn">+ Task</button></div>
+      </div>
+      <section id="dashboard" class="section"></section>
+      <section id="timeline" class="section"></section>
+      <section id="tasks" class="section"></section>
+      <section id="focus" class="section"></section>
+      <section id="debt" class="section"></section>
+      <section id="calendar" class="section"></section>
+      <section id="analytics" class="section"></section>
+      <section id="settings" class="section"></section>
+    </main>
+    <aside class="insight" id="insight"></aside>
+  </div>
+  <nav class="mobileTabs" id="mobileTabs"></nav>
+  <div class="modal" id="taskModal">
+    <div class="dialog">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <div class="h1" id="taskModalTitle">Thêm task</div><button class="btn secondary"
+          onclick="closeModal('taskModal')">Đóng</button>
+      </div>
+      <div class="form">
+        <label>Tiêu đề<input class="input" id="fTitle"></label>
+        <label>Ngày<input class="input" id="fDate" type="date"></label>
+        <label>Duration phút<input class="input" id="fDuration" type="number" min="5" step="5"></label>
+        <label>Priority<select id="fPriority">
+            <option value="high">Cao</option>
+            <option value="medium">Vừa</option>
+            <option value="low">Thấp</option>
+          </select></label>
+        <label>Bắt đầu<input class="input" id="fStart" type="time"></label>
+        <label>Kết thúc<input class="input" id="fEnd" type="time"></label>
+        <label>Deadline<input class="input" id="fDeadline" type="time"></label>
+        <label>Trạng thái<select id="fStatus">
+            <option value="todo">todo</option>
+            <option value="doing">doing</option>
+            <option value="done">done</option>
+            <option value="deferred">deferred</option>
+            <option value="stack">stack</option>
+          </select></label>
+        <label>Tag<input class="input" id="fTags" placeholder="#study #work"></label>
+        <label>Liên kết sự kiện<select id="fEvent"></select></label>
+        <label class="full">Ghi chú<textarea id="fNotes"></textarea></label>
+        <div class="checks full"><label><input type="checkbox" id="fMission"> Việc chính hôm nay</label><label><input
+              type="checkbox" id="fDone"> Done</label></div>
+        <div class="full row"><button class="btn" id="saveTaskBtn">Lưu</button><button class="btn secondary"
+            id="deleteTaskBtn">Xoá</button><button class="btn ghost" type="button"
+            onclick="quickDur(25)">25m</button><button class="btn ghost" type="button"
+            onclick="quickDur(50)">50m</button><button class="btn ghost" type="button"
+            onclick="quickDur(90)">90m</button><button class="btn ghost" type="button"
+            onclick="quickDur(120)">2h</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="modal" id="taskDetailModal">
+    <div class="dialog detail" id="taskDetailContent"></div>
+  </div>
+  <div class="modal" id="eventModal">
+    <div class="dialog">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <div class="h1">Thêm sự kiện</div><button class="btn secondary" onclick="closeModal('eventModal')">Đóng</button>
+      </div>
+      <div class="form">
+        <label>Tên sự kiện<input class="input" id="eTitle"></label>
+        <label>Loại<select id="eType">
+            <option value="solar">Dương lịch</option>
+            <option value="lunar">Âm lịch tham khảo</option>
+          </select></label>
+        <label>Ngày<input class="input" id="eDate" type="date"></label>
+        <label>Lặp lại<select id="eRecurring">
+            <option value="yes">Hằng năm</option>
+            <option value="no">Một lần</option>
+          </select></label>
+        <label class="full">Ghi chú<textarea id="eNotes"></textarea></label>
+        <div class="full"><button class="btn" id="saveEventBtn">Lưu sự kiện</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="modal" id="triageModal">
+    <div class="dialog">
+      <div id="triageContent"></div>
+    </div>
+  </div>
+  <input type="file" id="importFile" accept="application/json" hidden>
+  <div class="modal" id="scheduleModal">
+    <div class="dialog" style="max-width:400px">
+      <div class="row" style="justify-content:space-between;margin-bottom:16px">
+        <div class="h1" style="font-size:22px">Lên lịch ngày</div>
+        <button class="btn secondary" id="scheduleCancelBtn">Đóng</button>
+      </div>
+      <p class="muted" style="margin:0 0 12px">Chọn ngày muốn xếp lại task nợ này:</p>
+      <input class="input" type="date" id="scheduleDate" style="margin-bottom:14px">
+      <button class="btn" id="scheduleConfirmBtn" style="width:100%">Xác nhận</button>
+    </div>
+  </div>
+  <div class="modal" id="focusReviewModal">
+    <div class="dialog" style="max-width:620px">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <div>
+          <div class="h1">Review phiên tập trung</div>
+          <div class="muted small" id="focusReviewMeta"></div>
+        </div>
+        <button class="btn secondary" onclick="closeFocusReview()">Đóng</button>
+      </div>
+      <label class="small muted" style="font-weight:700;text-transform:uppercase">Focus log</label>
+      <textarea id="focusReviewLog" style="margin:6px 0 12px"></textarea>
+      <label class="small muted" style="font-weight:700;text-transform:uppercase">Next action</label>
+      <input class="input" id="focusReviewNext" placeholder="Bước tiếp theo nếu task chưa xong" style="margin:6px 0 14px">
+      <div class="row">
+        <button class="btn ok" onclick="focusReviewDone()">Đánh dấu Done</button>
+        <button class="btn secondary" onclick="focusReviewSave()">Thêm log</button>
+        <button class="btn secondary" onclick="focusReviewNextAction()">Tạo bước tiếp theo</button>
+        <button class="btn warn" onclick="focusReviewStack()">Đưa vào việc tồn</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script>
+    const $ = s => document.querySelector(s); const $$ = s => Array.from(document.querySelectorAll(s));
+    const KEY = 'timeline_focus_product_final_v6';
+    const tabs = [
+      ['dashboard', 'Hôm nay'],
+      ['timeline', 'Timeline'],
+      ['tasks', 'Tasks'],
+      ['focus', 'Tập trung'],
+      ['debt', 'Việc tồn'],
+      ['calendar', 'Lịch & Sự kiện'],
+      ['analytics', 'Thống kê'],
+      ['settings', 'Cài đặt']
+    ];
+    const THEMES = [
+      { id: 'github-light', name: 'GitHub Light', meta: '#0969da', swatches: ['#f6f8fa', '#ffffff', '#0969da', '#1a7f37', '#cf222e'] },
+      { id: 'vscode-dark', name: 'VS Code Dark', meta: '#1e1e1e', swatches: ['#1e1e1e', '#252526', '#3794ff', '#6a9955', '#f44747'] },
+      { id: 'vscode-dark-plus', name: 'VS Code Dark+', meta: '#181818', swatches: ['#181818', '#1f1f1f', '#4fc1ff', '#89d185', '#f14c4c'] },
+      { id: 'one-dark-pro', name: 'One Dark Pro', meta: '#21252b', swatches: ['#21252b', '#282c34', '#61afef', '#98c379', '#e06c75'] },
+      { id: 'dracula', name: 'Dracula', meta: '#282a36', swatches: ['#282a36', '#2f3240', '#8be9fd', '#50fa7b', '#ff5555'] },
+      { id: 'monokai', name: 'Monokai', meta: '#272822', swatches: ['#272822', '#2f3129', '#66d9ef', '#a6e22e', '#f92672'] },
+      { id: 'solarized-light', name: 'Solarized Light', meta: '#fdf6e3', swatches: ['#fdf6e3', '#fffaf0', '#268bd2', '#859900', '#dc322f'] },
+      { id: 'system', name: 'Theo hệ điều hành', meta: '#2563eb', swatches: ['#f7f8fa', '#ffffff', '#2563eb', '#1e1e1e', '#3794ff'] }
+    ];
+    const vnDays = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+    let currentTab = 'dashboard', selectedDate = fmtDate(new Date()), editingTaskId = null, detailTaskId = null, focusTimer = null, focusRemain = 0, focusTaskId = null, focusStartedAt = null, focusInitialSeconds = 0;
+    let undoStack = [], pendingFocusReview = null;
+    let taskFilters = { q: '', status: 'all', priority: 'all', tag: 'all', special: 'all' };
+    let db = load();
+    function uid() { return crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()) }
+    function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
+    function endOfDay(d) { const x = startOfDay(d); x.setDate(x.getDate() + 1); return x }
+    function fmtDate(d) { d = new Date(d); return d.toISOString().slice(0, 10) }
+    function hm(d) { return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') }
+    function parseDate(s) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d) }
+    function minOf(t) { if (!t) return null; const [h, m] = t.split(':').map(Number); return h * 60 + m }
+    function timeOfMin(n) { n = ((n % 1440) + 1440) % 1440; return String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0') }
+    function clamp(n, a, b) { return Math.max(a, Math.min(b, n)) }
+    function pct(n) { return clamp(Math.round(n), 0, 100) }
+    function esc(s) { return String(s ?? '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m])) }
+    function toast(msg, action = null) { const t = $('#toast'); t.innerHTML = `${esc(msg)}${action ? ` <button onclick="${action.fn}">${esc(action.label)}</button>` : ''}`; t.classList.add('show'); clearTimeout(toast._timer); toast._timer = setTimeout(() => t.classList.remove('show'), action ? 5200 : 2200) }
+    function cloneDb() { return JSON.parse(JSON.stringify(db)) }
+    function pushUndo(label) { undoStack.push({ label, db: cloneDb(), selectedDate }); if (undoStack.length > 20) undoStack.shift(); }
+    function undoLast() { const item = undoStack.pop(); if (!item) return; db = item.db; selectedDate = item.selectedDate || selectedDate; normalize(); render(); toast(`Đã hoàn tác: ${item.label}`) }
+    function toastUndo(msg) { toast(msg, { label: 'Hoàn tác', fn: 'undoLast()' }) }
+    function getHourHeight() { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--h')) || 64 }
+    function defaultFlow() { return { summary: '', checklist: [], notes: [], blockers: [], nextActions: [], logs: [] } }
+    function ensureFlow(t) {
+      t.flow = Object.assign(defaultFlow(), t.flow || {});
+      t.flow.checklist = (t.flow.checklist || []).map(x => typeof x === 'string' ? { id: uid(), text: x, done: false } : Object.assign({ id: uid(), text: '', done: false }, x));
+      ['notes', 'blockers', 'nextActions', 'logs'].forEach(k => t.flow[k] = (t.flow[k] || []).map(x => typeof x === 'string' ? { id: uid(), text: x, createdAt: new Date().toISOString() } : Object.assign({ id: uid(), text: '', createdAt: new Date().toISOString() }, x)));
+      return t.flow;
+    }
+    function normalizeThemeId(id) { if (id === 'light') return 'github-light'; if (id === 'dark') return 'vscode-dark'; return THEMES.some(t => t.id === id) ? id : 'github-light' }
+    function activeTheme() { return THEMES.find(t => t.id === normalizeThemeId(db.settings.theme)) || THEMES[0] }
+    function applyTheme(id = db.settings.theme) {
+      const themeId = normalizeThemeId(id);
+      db.settings.theme = themeId;
+      document.documentElement.dataset.theme = themeId;
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = activeTheme().meta;
+      const btn = $('#themeBtn');
+      if (btn) btn.textContent = `Giao diện: ${activeTheme().name}`;
+    }
+    function setTheme(id) { applyTheme(id); save(); render(); toast(`Đã đổi sang ${activeTheme().name}`) }
+    function cycleTheme() {
+      const current = normalizeThemeId(db.settings.theme);
+      const i = THEMES.findIndex(t => t.id === current);
+      setTheme(THEMES[(i + 1) % THEMES.length].id);
+    }
+    function themePickerHTML() {
+      const current = normalizeThemeId(db.settings.theme);
+      return `<div class="themeGrid">${THEMES.map(t => `<button class="themeCard ${t.id === current ? 'active' : ''}" onclick="setTheme('${t.id}')"><div style="font-weight:700">${t.name}</div><div class="swatches">${t.swatches.map(c => `<i style="background:${c}"></i>`).join('')}</div></button>`).join('')}</div>`;
+    }
+    function defaultData() { return { tasks: [], events: seedEvents(), sessions: [], settings: { theme: 'github-light', accent: 'blue', availableStart: '07:00', availableEnd: '22:00', dailyMissionLimit: 3, notifications: false }, reviews: {} } }
+    function load() { try { return Object.assign(defaultData(), JSON.parse(localStorage.getItem(KEY) || '{}')) } catch (e) { return defaultData() } }
+    function save() { localStorage.setItem(KEY, JSON.stringify(db)); }
+    function seedEvents() {
+      return [
+        { id: uid(), title: 'Tết Dương lịch', type: 'solar', date: '2026-01-01', recurring: true, notes: '' }, { id: uid(), title: 'Valentine', type: 'solar', date: '2026-02-14', recurring: true, notes: '' }, { id: uid(), title: 'Ngày Quốc tế Phụ nữ', type: 'solar', date: '2026-03-08', recurring: true, notes: '' }, { id: uid(), title: 'Giỗ Tổ Hùng Vương', type: 'lunar', date: '2026-04-26', recurring: true, notes: '10/3 âm lịch, ngày dương tham khảo theo bảng tra' },
+        { id: uid(), title: 'Giải phóng miền Nam', type: 'solar', date: '2026-04-30', recurring: true, notes: '' }, { id: uid(), title: 'Quốc tế Lao động', type: 'solar', date: '2026-05-01', recurring: true, notes: '' }, { id: uid(), title: 'Quốc khánh Việt Nam', type: 'solar', date: '2026-09-02', recurring: true, notes: '' }, { id: uid(), title: 'Tết Trung Thu', type: 'lunar', date: '2026-09-25', recurring: true, notes: '15/8 âm lịch, tham khảo' },
+        { id: uid(), title: 'Ngày Phụ nữ Việt Nam', type: 'solar', date: '2026-10-20', recurring: true, notes: '' }, { id: uid(), title: 'Ngày Nhà giáo Việt Nam', type: 'solar', date: '2026-11-20', recurring: true, notes: '' }, { id: uid(), title: 'Giáng sinh', type: 'solar', date: '2026-12-25', recurring: true, notes: '' }, { id: uid(), title: 'Ông Công Ông Táo', type: 'lunar', date: '2027-02-01', recurring: true, notes: '23 tháng Chạp âm lịch, tham khảo' },
+        { id: uid(), title: 'Tết Nguyên Đán', type: 'lunar', date: '2027-02-06', recurring: true, notes: 'Mùng 1 Tết âm lịch, tham khảo' }]
+    }
+    function normalize() { db.settings = Object.assign({ theme: 'github-light', accent: 'blue', availableStart: '07:00', availableEnd: '22:00', dailyMissionLimit: 3, notifications: false }, db.settings || {}); db.settings.theme = normalizeThemeId(db.settings.theme); db.tasks.forEach(t => { if (!t.id) t.id = uid(); if (t.done && t.status !== 'done') t.status = 'done'; if (!t.status) t.status = t.done ? 'done' : 'todo'; if (!t.createdAt) t.createdAt = new Date().toISOString(); if (!t.duration) t.duration = 60; ensureFlow(t); }); autoStackOld(); save(); }
+    function autoStackOld() {
+      const today = fmtDate(new Date());
+      db.tasks.forEach(t => {
+        if (t.date < today && !['done', 'stack', 'deleted'].includes(t.status)) {
+          t.status = 'stack';
+          t.stackType = t.deadline ? 'overdue' : 'unfinished';
+          t.stackedAt = t.stackedAt || new Date().toISOString();
+          t.reason = t.reason || 'Qua ngày nhưng chưa Done';
+          t.deferCount = t.deferCount || 0;
+        }
+      });
+    }
+    function dayTasks(date = selectedDate) { return db.tasks.filter(t => t.date === date && t.status !== 'deleted') }
+    function activeDayTasks(date = selectedDate) { return dayTasks(date).filter(t => t.status !== 'stack') }
+    function stackTasks() { return db.tasks.filter(t => t.status === 'stack') }
+    function doneTasks(date = selectedDate) { return dayTasks(date).filter(t => t.status === 'done') }
+    function incomplete(date = selectedDate) { return activeDayTasks(date).filter(t => t.status !== 'done') }
+    function dayProgress() { const now = new Date(); return now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60 }
+    function remainingTodayMins() { const now = new Date(); return fmtDate(now) === selectedDate ? Math.max(0, 1440 - dayProgress()) : 1440 }
+    function availableRemainMins(date = selectedDate) { const s = minOf(db.settings.availableStart) || 0, e = minOf(db.settings.availableEnd) || 1440; let rem = e - s; if (date === fmtDate(new Date())) rem = Math.max(0, e - dayProgress()); return rem }
+    function durText(min) { min = Math.max(0, Math.round(min)); const d = Math.floor(min / 1440), h = Math.floor((min % 1440) / 60), m = min % 60; return (d ? d + ' ngày ' : '') + (h ? h + 'h ' : '') + (m || (!d && !h) ? m + 'm' : '') }
+    function init() {
+      normalize();
+      applyTheme(db.settings.theme);
+      $('#selectedDate').value = selectedDate;
+      renderNav();
+      bind();
+      render();
+      updateNetworkStatus();
+      window.addEventListener('online', updateNetworkStatus);
+      window.addEventListener('offline', updateNetworkStatus);
+      if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (db.settings.theme === 'system') applyTheme('system') });
+      setInterval(() => {
+        renderClock();
+        updateHomeClock();
+        renderInsightCounters();
+        if (currentTab === 'timeline') updateNowLine();
+      }, 1000);
+    }
+    const mobilePrimaryTabs = ['dashboard', 'timeline', 'tasks', 'focus'];
+    function renderNav() {
+      const html = tabs.map(([id, name]) => `<button data-tab="${id}" class="${id === currentTab ? 'active' : ''}">${name}</button>`).join('');
+      $('#nav').innerHTML = html;
+      const moreActive = !mobilePrimaryTabs.includes(currentTab);
+      $('#mobileTabs').innerHTML = mobilePrimaryTabs.map(id => {
+        const name = { dashboard: 'Hôm nay', timeline: 'Timeline', tasks: 'Tasks', focus: 'Tập trung' }[id];
+        return `<button data-tab="${id}" class="${id === currentTab ? 'active' : ''}">${name}</button>`;
+      }).join('') + `<button id="moreBtn" class="${moreActive ? 'active' : ''}">Thêm</button>`;
+      const moreBtn = $('#moreBtn');
+      if (moreBtn) moreBtn.onclick = toggleMoreDrawer;
+    }
+    function toggleMoreDrawer() {
+      let drawer = $('#moreDrawer');
+      if (drawer) { drawer.remove(); return; }
+      drawer = document.createElement('div');
+      drawer.id = 'moreDrawer';
+      drawer.style.cssText = 'position:fixed;bottom:56px;left:0;right:0;background:var(--panel);border-top:1px solid var(--line);z-index:39;padding:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px';
+      const secondaryTabs = tabs.filter(([id]) => !mobilePrimaryTabs.includes(id));
+      drawer.innerHTML = secondaryTabs.map(([id, name]) =>
+        `<button data-tab="${id}" style="background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px 4px;font-size:12px;color:${id === currentTab ? 'var(--text)' : 'var(--muted)'}">${name}</button>`
+      ).join('');
+      drawer.addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { drawer.remove(); } });
+      document.body.appendChild(drawer);
+      // Đóng khi click ngoài
+      setTimeout(() => document.addEventListener('click', function h(ev) {
+        if (!drawer.contains(ev.target) && ev.target.id !== 'moreBtn') { drawer.remove(); document.removeEventListener('click', h); }
+      }), 0);
+    }
+    function bind() { document.body.addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { currentTab = b.dataset.tab; render(); } }); $('#selectedDate').onchange = e => { selectedDate = e.target.value; render() }; $('#openTaskBtn').onclick = () => openTask(); $('#saveTaskBtn').onclick = saveTask; $('#deleteTaskBtn').onclick = deleteTask; $('#exportBtn').onclick = exportData; $('#importBtn').onclick = () => $('#importFile').click(); $('#importFile').onchange = importData; $('#themeBtn').onclick = cycleTheme; $('#notifyBtn').onclick = requestNotify; $('#saveEventBtn').onclick = saveEvent; $('#fDuration').oninput = autoEnd; $('#fStart').oninput = autoEnd }
+    function render() { renderNav(); renderClock(); $('#pageTitle').textContent = tabs.find(t => t[0] === currentTab)[1]; $$('.section').forEach(s => s.classList.toggle('active', s.id === currentTab)); $('#selectedDate').value = selectedDate; ({ dashboard: renderDashboard, timeline: () => renderTimeline(true), tasks: renderTasks, focus: renderFocus, debt: renderDebt, calendar: renderCalendar, analytics: renderAnalytics, settings: renderSettings }[currentTab])(); renderInsight(); save() }
+    function renderClock() { const n = new Date(); $('#clock').textContent = `${vnDays[n.getDay()]}, ${n.toLocaleDateString('vi-VN')}` }
+    function updateNetworkStatus() { const online = navigator.onLine; const el = $('#netStatus'); if (el) el.innerHTML = `<span class="statusDot ${online ? '' : 'offline'}"></span>${online ? 'Online' : 'Offline'}` }
+    function renderHomeClock(next) {
+      return `<div class="card homeClock"><h3>Đồng hồ hôm nay</h3><div class="clockRing" id="homeClockRing"><div class="clockCenter"><div class="clockTime" id="homeClockTime"></div><div class="clockDate" id="homeClockDate"></div></div></div><div class="small muted" id="homeClockPct"></div><div style="width:100%;border-top:1px solid var(--line);padding-top:10px"><div class="small muted">Sự kiện gần nhất</div><div style="font-weight:700">${next ? esc(next.title) : 'Không có'}</div><div class="small muted">${next ? `${next.date} · còn ${next.days} ngày` : ''}</div></div></div>`;
+    }
+    function updateHomeClock() {
+      const ring = $('#homeClockRing');
+      if (!ring) return;
+      const n = new Date();
+      const pctDay = pct(dayProgress() / 1440 * 100);
+      ring.style.setProperty('--clock-pct', pctDay + '%');
+      const timeEl = $('#homeClockTime'); if (timeEl) timeEl.textContent = hm(n);
+      const dateEl = $('#homeClockDate'); if (dateEl) dateEl.textContent = `${vnDays[n.getDay()]}, ${n.toLocaleDateString('vi-VN')}`;
+      const pctEl = $('#homeClockPct'); if (pctEl) pctEl.textContent = `${pctDay}% ngày đã trôi`;
+    }
+    function stats(date = selectedDate) { const tasks = dayTasks(date), active = activeDayTasks(date), done = tasks.filter(t => t.status === 'done'), mission = active.filter(t => t.mission), need = incomplete(date).reduce((s, t) => s + Number(t.duration || 0), 0), blocked = active.filter(t => t.start && t.end).reduce((s, t) => s + (minOf(t.end) - minOf(t.start)), 0); const now = new Date(); const dayPct = date === fmtDate(now) ? dayProgress() / 1440 * 100 : (date < fmtDate(now) ? 100 : 0); return { tasks, active, done, mission, need, blocked, donePct: tasks.length ? done.length / tasks.length * 100 : 0, dayPct, remain: remainingTodayMins(), avail: availableRemainMins(date) } }
+    function renderDashboard() {
+      const s = stats(); const week = weekStats(); const next = nextEvent(); const rec = recommendations(); $('#dashboard').innerHTML = `
+<div class="cmd"><div class="recommend"><h2 style="margin:0">Kế hoạch hôm nay</h2><div class="muted small">Nhìn nhanh việc cần làm và thời gian còn lại</div><ol>${rec.map(x => `<li>${x}</li>`).join('')}</ol><div class="row" style="margin-top:12px"><button class="btn sm" onclick="goTab('timeline')">Mở timeline</button><button class="btn sm secondary" onclick="openTask()">Thêm task</button><button class="btn sm secondary" onclick="openTriage()">Xử lý việc tồn</button></div></div>${renderHomeClock(next)}</div>
+<div class="cards"><div class="card"><h3>Hôm nay còn</h3><div class="big">${durText(s.remain)}</div><div class="bar"><i style="width:${100 - pct(s.dayPct)}%"></i></div><div class="small muted">Thời gian đang trôi trong ngày</div></div><div class="card"><h3>Task hoàn thành</h3><div class="big">${pct(s.donePct)}%</div><div class="bar"><i style="width:${pct(s.donePct)}%"></i></div><div class="small muted">${s.done.length}/${s.tasks.length} task</div></div><div class="card"><h3>Tuần này còn</h3><div class="big">${durText(week.remain)}</div><div class="bar"><i style="width:${100 - pct(week.passed)}%"></i></div><div class="small muted">${week.done}/${week.total} task xong</div></div><div class="card"><h3>Việc tồn</h3><div class="big">${stackTasks().length}</div><div class="small muted">Tổng: ${durText(stackTasks().reduce((a, t) => a + Number(t.duration || 0), 0))}</div></div></div>
+<div class="split" style="margin-top:16px"><div>${renderTaskListHTML(activeDayTasks(), true)}</div><div class="card"><h3>Việc chính hôm nay</h3>${s.mission.length ? s.mission.map(t => taskMini(t)).join('') : '<div class="muted">Chưa chọn việc chính. Nên chọn tối đa 3 task quan trọng.</div>'}</div></div>`
+      updateHomeClock();
+    }
+    function recommendations() { const s = stats(); const arr = []; if (!dayTasks().length) arr.push('Tạo 1-3 task quan trọng cho hôm nay, đừng lập kế hoạch quá tải.'); if (s.need > s.avail) arr.push(`Bạn đang thiếu khoảng <b>${durText(s.need - s.avail)}</b>. Hãy dời hoặc chia nhỏ task.`); if (s.dayPct > s.donePct + 25 && dayTasks().length) arr.push('Ngày đang trôi nhanh hơn tiến độ task. Nên bắt đầu task ưu tiên cao ngay.'); const debt = stackTasks().sort((a, b) => debtAge(b) - debtAge(a))[0]; if (debt) arr.push(`Xử lý việc tồn lâu nhất: <b>${esc(debt.title)}</b> đã ${debtAge(debt)} ngày.`); const next = nextEvent(); if (next) arr.push(`Sự kiện gần nhất là <b>${esc(next.title)}</b>. Gắn task chuẩn bị nếu cần.`); return arr.slice(0, 4) }
+    function weekStats() { const d = parseDate(selectedDate); const monday = startOfDay(d); monday.setDate(d.getDate() - ((d.getDay() + 6) % 7)); const end = new Date(monday); end.setDate(end.getDate() + 7); let total = 0, done = 0; db.tasks.forEach(t => { const td = parseDate(t.date); if (td >= monday && td < end) { total++; if (t.status === 'done') done++; } }); let remain = (end - new Date()) / 60000; let passed = 100 - remain / (7 * 1440) * 100; return { total, done, remain: Math.max(0, remain), passed: clamp(passed, 0, 100) } }
+    function renderInsight() {
+      const s = stats(); const next = nextEvent(); const bad = s.need > s.avail;
+      $('#insight').innerHTML = `<h2>Tổng quan</h2><div class="grid">
+        <div class="card"><h3>Ngày đã trôi</h3><div class="big" id="ins-dayPct">${pct(s.dayPct)}%</div><div class="bar"><i id="ins-dayBar" style="width:${pct(s.dayPct)}%"></i></div></div>
+        <div class="card"><h3>Thời gian còn lại</h3><div class="big" id="ins-remain">${durText(s.remain)}</div><div class="bar"><i id="ins-remainBar" style="width:${100 - pct(s.dayPct)}%"></i></div><div class="small muted">Cập nhật theo thời gian thực</div></div>
+        <div class="card"><h3>Task hoàn thành</h3><div class="big">${pct(s.donePct)}%</div><div class="bar"><i style="width:${pct(s.donePct)}%"></i></div></div>
+        <div class="card"><h3>Cảnh báo</h3><p>Task chưa xong cần: <b>${durText(s.need)}</b></p><p>Thời gian khả dụng: <b id="ins-avail">${durText(s.avail)}</b></p><p class="${bad ? 'dangerText' : 'okText'}">${bad ? 'Quá tải ' + durText(s.need - s.avail) : 'Không quá tải theo ước lượng.'}</p>${s.dayPct > s.donePct + 20 && s.tasks.length ? `<p class="warnText">Ngày trôi ${pct(s.dayPct)}% nhưng task mới xong ${pct(s.donePct)}% -> đang chậm.</p>` : ''}</div>
+        <div class="card"><h3>Sự kiện tiếp theo</h3>${next ? `<table class="table"><tr><th>Sự kiện</th><th>Ngày</th><th>Còn</th></tr><tr><td>${esc(next.title)}</td><td>${next.date}</td><td>${next.days} ngày</td></tr></table>` : '<div class="muted">Không có sự kiện</div>'}</div>
+      </div>`;
+    }
+    // Chỉ cập nhật số liệu realtime, không rebuild toàn bộ insight DOM.
+    function renderInsightCounters() {
+      const s = stats();
+      const dayPctEl = $('#ins-dayPct'); if (dayPctEl) dayPctEl.textContent = pct(s.dayPct) + '%';
+      const dayBarEl = $('#ins-dayBar'); if (dayBarEl) dayBarEl.style.width = pct(s.dayPct) + '%';
+      const remainEl = $('#ins-remain'); if (remainEl) remainEl.textContent = durText(s.remain);
+      const remainBarEl = $('#ins-remainBar'); if (remainBarEl) remainBarEl.style.width = (100 - pct(s.dayPct)) + '%';
+    }
+    function renderTimeline(full = true) {
+      const tasks = activeDayTasks().filter(t => t.start && t.end);
+      const overlaps = findOverlaps(tasks);
+      const hourH = getHourHeight();
+      let hours = '';
+      for (let h = 0; h < 24; h++) {
+        hours += `<div class="hour" style="top:${h * hourH}px"><div class="hourLabel">${String(h).padStart(2, '0')}:00</div><div class="hourArea" data-hour="${h}"></div></div>`;
+      }
+      const now = new Date();
+      const isToday = fmtDate(now) === selectedDate;
+      const line = isToday ? `<div class="nowLine" id="nowLine" style="top:${(dayProgress() / 60) * hourH}px"></div>` : '';
+      const blocks = tasks.map(t => {
+        const top = (minOf(t.start) / 60) * hourH;
+        const height = Math.max(42, ((minOf(t.end) - minOf(t.start)) / 60) * hourH - 4);
+        return `<div class="tblock ${t.priority} ${overlaps.has(t.id) ? 'overlap' : ''} ${t.status === 'done' ? 'done' : ''}" style="top:${top}px;height:${height}px" onclick="openTaskDetail('${t.id}')">
+          <div class="name">${esc(t.title)}</div>
+          <div class="meta">${t.start}-${t.end} · ${t.duration}m ${t.mission ? '· Việc chính' : ''}</div>
+        </div>`;
+      }).join('');
+      const uns = activeDayTasks().filter(t => !t.start || !t.end);
+      $('#timeline').innerHTML = `
+        <div class="quick">
+          <input class="input" id="quickAdd" placeholder="Thêm nhanh: Ôn K-means 19:00 90m high #study">
+          <button class="btn" onclick="quickAdd()">Thêm nhanh</button>
+          <button class="btn secondary" onclick="autoSchedule()">Tự xếp task chưa có giờ</button>
+        </div>
+        <div class="split">
+          <div>
+            <div class="row">
+              <span class="pill">Trùng lịch: ${overlaps.size}</span>
+              <span class="pill">Block: ${tasks.length}</span>
+              <span class="pill">Ngày: ${selectedDate}</span>
+            </div>
+            <div class="timelineWrap" onclick="timelineClick(event)">${hours}${line}${blocks}</div>
+          </div>
+          <div class="card"><h3>Chưa xếp giờ</h3><div class="list">${uns.length ? uns.map(t => taskMini(t)).join('') : '<div class="muted">Không có task chưa xếp giờ.</div>'}</div></div>
+        </div>`;
+    }
+    // Chỉ di chuyển nowLine DOM node thay vì rebuild toàn bộ timeline mỗi giây.
+    function updateNowLine() {
+      const line = $('#nowLine');
+      if (!line) return;
+      if (fmtDate(new Date()) === selectedDate) {
+        line.style.top = (dayProgress() / 60) * getHourHeight() + 'px';
+      }
+    }
+    // Sweep-line O(n log n) để phát hiện overlap.
+    function findOverlaps(tasks) {
+      const set = new Set();
+      if (tasks.length < 2) return set;
+      // Event: [time, type (0=end, 1=start), taskId].
+      const events = [];
+      tasks.forEach(t => {
+        const s = minOf(t.start), e = minOf(t.end);
+        if (s === null || e === null) return;
+        events.push([s, 1, t.id]); // start
+        events.push([e, 0, t.id]);
+      });
+      events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      const active = new Set();
+      for (const [, type, id] of events) {
+        if (type === 1) { // start
+          if (active.size > 0) {
+            set.add(id);
+            active.forEach(aid => set.add(aid));
+          }
+          active.add(id);
+        } else { // end
+          active.delete(id);
+        }
+      }
+      return set;
+    }
+    function timelineClick(e) { const area = e.target.closest('.hourArea'); if (!area || e.target.closest('.tblock')) return; openTask(null, { date: selectedDate, start: timeOfMin(Number(area.dataset.hour) * 60), duration: 60 }) }
+    function taskText(t) { const f = ensureFlow(t); return [t.title, t.notes, ...(t.tags || []), f.summary, ...f.checklist.map(x => x.text), ...f.notes.map(x => x.text), ...f.blockers.map(x => x.text), ...f.nextActions.map(x => x.text)].join(' ').toLowerCase() }
+    function taskHasBlocker(t) { return ensureFlow(t).blockers.some(x => x.text && x.text.trim()) }
+    function taskOverdue(t) { return t.date < fmtDate(new Date()) && !['done', 'deleted'].includes(t.status) }
+    function filteredTasks(list) {
+      const q = taskFilters.q.trim().toLowerCase();
+      return list.filter(t => {
+        if (q && !taskText(t).includes(q)) return false;
+        if (taskFilters.status !== 'all' && t.status !== taskFilters.status) return false;
+        if (taskFilters.priority !== 'all' && t.priority !== taskFilters.priority) return false;
+        if (taskFilters.tag !== 'all' && !(t.tags || []).includes(taskFilters.tag)) return false;
+        if (taskFilters.special === 'blocker' && !taskHasBlocker(t)) return false;
+        if (taskFilters.special === 'overdue' && !taskOverdue(t)) return false;
+        if (taskFilters.special === 'mission' && !t.mission) return false;
+        return true;
+      });
+    }
+    function updateTaskFilter(key, value) {
+      taskFilters[key] = value;
+      if (key === 'q') {
+        const list = filteredTasks(dayTasks());
+        const mount = $('#taskListMount');
+        const count = $('#taskFilterCount');
+        if (mount) mount.innerHTML = renderTaskListHTML(list, true);
+        if (count) count.textContent = `${list.length} đang hiển thị`;
+        return;
+      }
+      renderTasks();
+    }
+    function renderTasks() {
+      const all = dayTasks();
+      const list = filteredTasks(all);
+      const tags = Array.from(new Set(db.tasks.flatMap(t => t.tags || []))).sort();
+      $('#tasks').innerHTML = `<div class="quick"><input class="input" id="quickAddTasks" placeholder="Thêm nhanh: Viết báo cáo 08:00 50m high #work !mission"><button class="btn" onclick="quickAdd('quickAddTasks')">Thêm nhanh</button><button class="btn secondary" onclick="openTask()">Form đầy đủ</button></div>
+      <div class="filterBar">
+        <input class="input" value="${esc(taskFilters.q)}" placeholder="Tìm title, note, tag, blocker..." oninput="updateTaskFilter('q', this.value)">
+        <select onchange="updateTaskFilter('status', this.value)"><option value="all">Mọi trạng thái</option>${['todo', 'doing', 'done', 'deferred', 'stack'].map(x => `<option value="${x}" ${taskFilters.status === x ? 'selected' : ''}>${x}</option>`).join('')}</select>
+        <select onchange="updateTaskFilter('priority', this.value)"><option value="all">Mọi priority</option>${['high', 'medium', 'low'].map(x => `<option value="${x}" ${taskFilters.priority === x ? 'selected' : ''}>${x}</option>`).join('')}</select>
+        <select onchange="updateTaskFilter('tag', this.value)"><option value="all">Mọi tag</option>${tags.map(x => `<option value="${esc(x)}" ${taskFilters.tag === x ? 'selected' : ''}>#${esc(x)}</option>`).join('')}</select>
+        <select onchange="updateTaskFilter('special', this.value)"><option value="all">Tất cả</option><option value="blocker" ${taskFilters.special === 'blocker' ? 'selected' : ''}>Có blocker</option><option value="overdue" ${taskFilters.special === 'overdue' ? 'selected' : ''}>Quá hạn</option><option value="mission" ${taskFilters.special === 'mission' ? 'selected' : ''}>Việc chính</option></select>
+      </div>
+      <div class="cards"><div class="card"><h3>Tổng task</h3><div class="big">${all.length}</div><div class="small muted" id="taskFilterCount">${list.length} đang hiển thị</div></div><div class="card"><h3>Done</h3><div class="big">${doneTasks().length}</div></div><div class="card"><h3>Cần làm</h3><div class="big">${durText(incomplete().reduce((a, t) => a + Number(t.duration || 0), 0))}</div></div><div class="card"><h3>Việc chính</h3><div class="big">${all.filter(t => t.mission).length}</div></div></div><div id="taskListMount" style="margin-top:16px">${renderTaskListHTML(list, true)}</div>`
+    }
+    function renderTaskListHTML(list, actions = false) { return `<div class="list">${list.length ? list.map(t => `<div class="task"><div class="taskTop"><div><div class="taskTitle">${esc(t.title)}</div><div class="muted small">${t.date} ${t.start ? `· ${t.start}-${t.end}` : ''} · ${t.duration}m ${t.deadline ? `· deadline ${t.deadline}` : ''}</div></div><span class="badge ${t.priority}">${t.priority}</span></div><div class="row"><span class="badge">${t.status}</span>${t.mission ? '<span class="badge">Việc chính</span>' : ''}${(t.tags || []).map(x => `<span class="badge">#${esc(x)}</span>`).join('')}</div>${actions ? `<div class="row"><button class="btn sm" onclick="openTaskDetail('${t.id}')">Mở</button><button class="btn sm ok" onclick="markDone('${t.id}')">Done</button><button class="btn sm secondary" onclick="startFocus('${t.id}')">Tập trung</button><button class="btn sm secondary" onclick="openTask('${t.id}')">Sửa</button><button class="btn sm warn" onclick="moveToStack('${t.id}')">Việc tồn</button></div>` : ''}</div>`).join('') : '<div class="card muted">Chưa có task.</div>'}</div>` }
+    function taskMini(t) { return `<div class="task"><div class="taskTitle">${esc(t.title)}</div><div class="muted small">${t.start ? `${t.start}-${t.end} · ` : ''}${t.duration}m · ${t.status}</div><div class="row"><button class="btn sm" onclick="openTaskDetail('${t.id}')">Mở</button><button class="btn sm ok" onclick="markDone('${t.id}')">Done</button></div></div>` }
+    function openTask(id = null, preset = {}) { editingTaskId = id; const t = id ? db.tasks.find(x => x.id === id) : { title: '', date: selectedDate, duration: 60, priority: 'high', status: 'todo', mission: false, done: false, flow: defaultFlow(), ...preset }; if (!t) return; $('#taskModalTitle').textContent = id ? 'Sửa task' : 'Thêm task'; $('#fTitle').value = t.title || ''; $('#fDate').value = t.date || selectedDate; $('#fDuration').value = t.duration || 60; $('#fPriority').value = t.priority || 'medium'; $('#fStart').value = t.start || ''; $('#fEnd').value = t.end || ''; $('#fDeadline').value = t.deadline || ''; $('#fStatus').value = t.status || 'todo'; $('#fTags').value = (t.tags || []).map(x => '#' + x).join(' '); $('#fNotes').value = t.notes || ''; $('#fMission').checked = !!t.mission; $('#fDone').checked = t.status === 'done'; $('#deleteTaskBtn').style.display = id ? 'inline-flex' : 'none'; $('#fEvent').innerHTML = '<option value="">Không liên kết</option>' + db.events.map(e => `<option value="${e.id}">${esc(e.title)}</option>`).join(''); $('#fEvent').value = t.eventId || ''; openModal('taskModal') }
+    function saveTask() { const id = editingTaskId; let t = id ? db.tasks.find(x => x.id === id) : { id: uid(), createdAt: new Date().toISOString(), deferCount: 0, flow: defaultFlow() }; if (!t) return; const missionCount = activeDayTasks($('#fDate').value).filter(x => x.mission && x.id !== id).length; if ($('#fMission').checked && missionCount >= Number(db.settings.dailyMissionLimit || 3)) { toast('Việc chính hôm nay chỉ nên tối đa 3 task.'); return } ensureFlow(t); Object.assign(t, { title: $('#fTitle').value.trim() || 'Untitled task', date: $('#fDate').value, duration: Number($('#fDuration').value) || 60, priority: $('#fPriority').value, start: $('#fStart').value, end: $('#fEnd').value, deadline: $('#fDeadline').value, status: $('#fDone').checked ? 'done' : $('#fStatus').value, mission: $('#fMission').checked, notes: $('#fNotes').value, tags: $('#fTags').value.split(/\s+/).filter(Boolean).map(x => x.replace(/^#/, '')).filter(Boolean), eventId: $('#fEvent').value || '', updatedAt: new Date().toISOString() }); if (t.status === 'done') t.doneAt = new Date().toISOString(); if (!id) db.tasks.push(t); save(); closeModal('taskModal'); render(); if (detailTaskId === t.id) renderTaskDetail(t.id); toast('Đã lưu task') }
+    function deleteTask() { if (!editingTaskId) return; pushUndo('Xoá task'); db.tasks = db.tasks.filter(t => t.id !== editingTaskId); if (detailTaskId === editingTaskId) closeModal('taskDetailModal'); save(); closeModal('taskModal'); render(); toastUndo('Đã xoá task') }
+    function openTaskDetail(id) { detailTaskId = id; renderTaskDetail(id); openModal('taskDetailModal') }
+    function renderTaskDetail(id = detailTaskId) {
+      const t = db.tasks.find(x => x.id === id);
+      if (!t) { closeModal('taskDetailModal'); return; }
+      const flow = ensureFlow(t);
+      $('#taskDetailContent').innerHTML = `
+        <div class="detailHead">
+          <div>
+            <div class="h1">${esc(t.title)}</div>
+            <div class="row" style="margin-top:8px">
+              <span class="badge ${t.priority}">${t.priority}</span>
+              <span class="badge">${t.status}</span>
+              <span class="badge">${t.date}${t.start ? ` · ${t.start}-${t.end}` : ''}</span>
+              ${t.mission ? '<span class="badge">Việc chính</span>' : ''}
+            </div>
+          </div>
+          <div class="row"><button class="btn secondary" onclick="openTask('${t.id}')">Sửa</button><button class="btn secondary" onclick="closeModal('taskDetailModal')">Đóng</button></div>
+        </div>
+        <div class="detailBody">
+          <div class="grid">
+            <div class="flowSection">
+              <h3>Tóm tắt</h3>
+              <textarea id="flowSummary" placeholder="Mục tiêu, phạm vi, kết quả mong muốn..." oninput="updateFlowSummary('${t.id}', this.value)">${esc(flow.summary)}</textarea>
+            </div>
+            ${flowListHTML(t, 'checklist', 'Checklist', true)}
+            ${flowListHTML(t, 'notes', 'Notes')}
+          </div>
+          <div class="grid">
+            ${flowListHTML(t, 'blockers', 'Blockers')}
+            ${flowListHTML(t, 'nextActions', 'Next action')}
+            ${flowListHTML(t, 'logs', 'Focus logs', false, true)}
+          </div>
+        </div>`;
+      save();
+    }
+    function flowListHTML(t, key, title, checklist = false, readonly = false) {
+      const items = ensureFlow(t)[key] || [];
+      const rows = items.map(item => `<div class="flowItem ${item.done ? 'done' : ''}">
+        ${checklist ? `<input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleFlowCheck('${t.id}','${item.id}')">` : '<span class="muted">-</span>'}
+        <span>${esc(item.text)}</span>
+        ${readonly ? '<span></span>' : `<button class="btn sm ghost" onclick="removeFlowItem('${t.id}','${key}','${item.id}')">Xoá</button>`}
+      </div>`).join('') || '<div class="muted small">Chưa có nội dung.</div>';
+      const add = readonly ? '' : `<div class="flowAdd"><input class="input" id="flow-${key}-input" placeholder="Thêm ${title.toLowerCase()}"><button class="btn secondary" onclick="addFlowItem('${t.id}','${key}')">Thêm</button></div>`;
+      return `<div class="flowSection"><h3>${title}</h3>${rows}${add}</div>`;
+    }
+    function updateFlowSummary(id, value) { const t = db.tasks.find(x => x.id === id); if (!t) return; ensureFlow(t).summary = value; t.updatedAt = new Date().toISOString(); save(); }
+    function addFlowItem(id, key) { const t = db.tasks.find(x => x.id === id); const input = $(`#flow-${key}-input`); const text = input?.value.trim(); if (!t || !text) return; const flow = ensureFlow(t); flow[key].push(key === 'checklist' ? { id: uid(), text, done: false } : { id: uid(), text, createdAt: new Date().toISOString() }); input.value = ''; t.updatedAt = new Date().toISOString(); save(); renderTaskDetail(id); render(); }
+    function removeFlowItem(id, key, itemId) { const t = db.tasks.find(x => x.id === id); if (!t) return; const flow = ensureFlow(t); flow[key] = flow[key].filter(x => x.id !== itemId); t.updatedAt = new Date().toISOString(); save(); renderTaskDetail(id); render(); }
+    function toggleFlowCheck(id, itemId) { const t = db.tasks.find(x => x.id === id); if (!t) return; const item = ensureFlow(t).checklist.find(x => x.id === itemId); if (item) item.done = !item.done; t.updatedAt = new Date().toISOString(); save(); renderTaskDetail(id); render(); }
+    function quickDur(m) { $('#fDuration').value = m; autoEnd() }
+    function autoEnd() { const s = $('#fStart').value, d = Number($('#fDuration').value); if (s && d) $('#fEnd').value = timeOfMin(minOf(s) + d) }
+    function quickAdd(inputId = 'quickAdd') { const el = $('#' + inputId) || $('#quickAdd'); const str = el.value.trim(); if (!str) return; const words = str.split(/\s+/); let time = '', dur = 60, priority = 'medium', mission = false, tags = []; let title = []; for (const w of words) { if (/^\d{1,2}:\d{2}$/.test(w)) time = w; else if (/^\d+(m|min|ph|p)$/i.test(w)) dur = parseInt(w); else if (/^\d+h$/i.test(w)) dur = parseInt(w) * 60; else if (['high', 'cao', 'h'].includes(w.toLowerCase())) priority = 'high'; else if (['low', 'thap', 'thấp', 'l'].includes(w.toLowerCase())) priority = 'low'; else if (['medium', 'vua', 'vừa', 'm'].includes(w.toLowerCase())) priority = 'medium'; else if (w === '!mission') mission = true; else if (w.startsWith('#')) tags.push(w.slice(1)); else title.push(w) } const t = { id: uid(), title: title.join(' ') || 'Quick task', date: selectedDate, duration: dur, priority, start: time, end: time ? timeOfMin(minOf(time) + dur) : '', deadline: '', status: 'todo', mission, notes: '', tags, flow: defaultFlow(), createdAt: new Date().toISOString(), deferCount: 0 }; db.tasks.push(t); el.value = ''; save(); render(); toast('Đã thêm nhanh') }
+    function markDone(id) { const t = db.tasks.find(x => x.id === id); if (t) { pushUndo('Done task'); t.status = 'done'; t.doneAt = new Date().toISOString(); save(); render(); if (detailTaskId === id) renderTaskDetail(id); toastUndo('Đã đánh dấu Done') } }
+    function moveToStack(id, reason = 'Chủ động đưa vào việc tồn') { const t = db.tasks.find(x => x.id === id); if (t) { pushUndo('Chuyển vào việc tồn'); t.status = 'stack'; t.stackType = t.deadline ? 'overdue' : 'unfinished'; t.stackedAt = t.stackedAt || new Date().toISOString(); t.reason = reason; t.deferCount = (t.deferCount || 0) + 1; save(); render(); toastUndo('Đã chuyển vào việc tồn') } }
+    function autoSchedule() { pushUndo('Tự xếp lịch'); let cursor = minOf(db.settings.availableStart) || 420; const dayEnd = minOf(db.settings.availableEnd) || 1320; const occupied = activeDayTasks().filter(t => t.start && t.end).map(t => [minOf(t.start), minOf(t.end)]).sort((a, b) => a[0] - b[0]); const uns = activeDayTasks().filter(t => !t.start || !t.end).sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.priority] - { high: 0, medium: 1, low: 2 }[b.priority])); let skipped = 0, changed = 0; for (const t of uns) { let placed = false; for (let i = 0; i <= occupied.length; i++) { const nextStart = i < occupied.length ? occupied[i][0] : dayEnd; cursor = Math.max(cursor, i ? occupied[i - 1][1] : cursor); const end = cursor + Number(t.duration || 60); if (nextStart - cursor >= Number(t.duration || 60) && end <= dayEnd) { t.start = timeOfMin(cursor); t.end = timeOfMin(end); occupied.splice(i, 0, [cursor, end]); placed = true; changed++; break } } if (!placed) skipped++; } if (!changed) { undoStack.pop(); toast('Không có task nào được tự xếp'); return; } save(); render(); toastUndo(skipped ? `Đã tự xếp, còn ${skipped} task quá giờ khả dụng` : 'Đã tự xếp task') }
+    function renderFocus() { const tasks = activeDayTasks().filter(t => t.status !== 'done'); $('#focus').innerHTML = `<div class="cards"><div class="card"><h3>Đang tập trung</h3><div class="big" id="focusRemain">${durText(focusRemain)}</div><div class="muted">${focusTaskId ? esc(db.tasks.find(t => t.id === focusTaskId)?.title || 'Task') : 'Chưa chọn task'}</div><div class="row" style="margin-top:12px"><button class="btn" onclick="pauseFocus()">Pause</button><button class="btn ok" onclick="completeFocus()">Kết thúc</button><button class="btn secondary" onclick="addFocus(10)">+10m</button></div></div><div class="card"><h3>Preset</h3><div class="row"><button class="btn sm" onclick="setFocusPreset(25)">25m</button><button class="btn sm" onclick="setFocusPreset(50)">50m</button><button class="btn sm" onclick="setFocusPreset(90)">90m</button></div></div></div><h2>Chọn task tập trung</h2>${renderTaskListHTML(tasks, true)}`; updateFocusText() }
+    function startFocus(id, min = 25) { focusTaskId = id; focusInitialSeconds = min * 60; focusRemain = focusInitialSeconds; focusStartedAt = new Date(); clearInterval(focusTimer); focusTimer = setInterval(() => { focusRemain--; updateFocusText(); if (focusRemain <= 0) { notify('Focus xong', 'Hết phiên tập trung. Review task nhé.'); completeFocus(); } }, 1000); goTab('focus') }
+    function setFocusPreset(m) { if (!focusTaskId) { toast('Chọn task trước'); return } startFocus(focusTaskId, m) }
+    function pauseFocus() { clearInterval(focusTimer); focusTimer = null; toast('Đã pause focus') }
+    function addFocus(m) { focusRemain += m * 60; updateFocusText() }
+    function completeFocus() {
+      if (!focusTaskId) return;
+      const taskId = focusTaskId;
+      const t = db.tasks.find(x => x.id === taskId);
+      const endedAt = new Date();
+      const elapsed = Math.max(1, Math.round(((focusInitialSeconds || focusRemain) - focusRemain) / 60));
+      const log = { id: uid(), text: `${focusStartedAt ? hm(focusStartedAt) : ''}-${hm(endedAt)} · ${elapsed}m tập trung`, createdAt: endedAt.toISOString() };
+      pushUndo('Kết thúc focus');
+      db.sessions.push({ id: uid(), taskId, date: selectedDate, minutes: elapsed, createdAt: endedAt.toISOString() });
+      if (t) ensureFlow(t).logs.push(log);
+      pendingFocusReview = { taskId, logId: log.id, elapsed };
+      clearInterval(focusTimer);
+      focusTimer = null;
+      focusRemain = 0;
+      focusInitialSeconds = 0;
+      focusStartedAt = null;
+      focusTaskId = null;
+      save();
+      render();
+      openFocusReview();
+    }
+    function updateFocusText() { const el = $('#focusRemain'); if (el) el.textContent = durText(Math.ceil(focusRemain / 60)) }
+    function openFocusReview() {
+      if (!pendingFocusReview) return;
+      const t = db.tasks.find(x => x.id === pendingFocusReview.taskId);
+      if (!t) return;
+      const log = ensureFlow(t).logs.find(x => x.id === pendingFocusReview.logId);
+      $('#focusReviewMeta').textContent = `${t.title} · ${pendingFocusReview.elapsed}m`;
+      $('#focusReviewLog').value = log?.text || '';
+      $('#focusReviewNext').value = '';
+      openModal('focusReviewModal');
+    }
+    function saveFocusReviewLog() { if (!pendingFocusReview) return null; const t = db.tasks.find(x => x.id === pendingFocusReview.taskId); if (!t) return null; const log = ensureFlow(t).logs.find(x => x.id === pendingFocusReview.logId); if (log) log.text = $('#focusReviewLog').value.trim() || log.text; save(); return t; }
+    function closeFocusReview() { saveFocusReviewLog(); pendingFocusReview = null; closeModal('focusReviewModal'); render(); toastUndo('Đã lưu focus log') }
+    function focusReviewSave() { closeFocusReview() }
+    function focusReviewDone() { const t = saveFocusReviewLog(); const id = pendingFocusReview?.taskId; closeModal('focusReviewModal'); pendingFocusReview = null; if (id && t) markDone(id); }
+    function focusReviewNextAction() { const t = saveFocusReviewLog(); const text = $('#focusReviewNext').value.trim(); if (t && text) ensureFlow(t).nextActions.push({ id: uid(), text, createdAt: new Date().toISOString() }); pendingFocusReview = null; closeModal('focusReviewModal'); save(); render(); toastUndo(text ? 'Đã tạo bước tiếp theo' : 'Đã lưu focus log') }
+    function focusReviewStack() { const id = pendingFocusReview?.taskId; saveFocusReviewLog(); pendingFocusReview = null; closeModal('focusReviewModal'); if (id) moveToStack(id, 'Sau phiên tập trung vẫn chưa xong'); }
+    function renderDebt() { const list = stackTasks(); $('#debt').innerHTML = `<div class="row" style="margin-bottom:14px"><button class="btn" onclick="openTriage()">Xử lý việc tồn</button><span class="pill">Việc tồn: ${list.length}</span><span class="pill">Tổng: ${durText(list.reduce((a, t) => a + Number(t.duration || 0), 0))}</span></div><div class="cards"><div class="card"><h3>Tồn nhẹ 1-2 ngày</h3><div class="big">${list.filter(t => debtAge(t) <= 2).length}</div></div><div class="card"><h3>Tồn vừa 3-5 ngày</h3><div class="big">${list.filter(t => debtAge(t) > 2 && debtAge(t) <= 5).length}</div></div><div class="card"><h3>Tồn nặng >5 ngày</h3><div class="big">${list.filter(t => debtAge(t) > 5).length}</div></div><div class="card"><h3>Bị dời nhiều</h3><div class="big">${Math.max(0, ...list.map(t => t.deferCount || 0))}</div></div></div><div style="margin-top:16px">${list.length ? list.map(t => `<div class="task"><div class="taskTop"><div><div class="taskTitle">${esc(t.title)}</div><div class="muted small">${t.stackType || 'unfinished'} · tồn ${debtAge(t)} ngày · dời ${t.deferCount || 0} lần · ${t.duration}m</div><div class="small warnText">Lý do: ${esc(t.reason || 'Chưa có')}</div></div><span class="badge ${t.priority}">${t.priority}</span></div><div class="row"><button class="btn sm" onclick="doToday('${t.id}')">Làm hôm nay</button><button class="btn sm secondary" onclick="scheduleDebt('${t.id}')">Xếp lịch</button><button class="btn sm secondary" onclick="splitTask('${t.id}')">Chia nhỏ</button><button class="btn sm ok" onclick="markDone('${t.id}')">Done</button><button class="btn sm bad" onclick="deleteById('${t.id}')">Xoá</button></div></div>`).join('') : '<div class="card muted">Không có việc tồn.</div>'}</div>` }
+    function debtAge(t) { return Math.max(0, Math.floor((startOfDay(new Date()) - startOfDay(new Date(t.stackedAt || t.createdAt || new Date()))) / 86400000)) }
+    function openTriage() { const list = stackTasks().sort((a, b) => debtAge(b) - debtAge(a)); if (!list.length) { toast('Không có việc tồn'); return } renderTriage(list[0].id); openModal('triageModal') }
+    function renderTriage(id) { const t = db.tasks.find(x => x.id === id); if (!t) { closeModal('triageModal'); render(); return } $('#triageContent').innerHTML = `<div class="row" style="justify-content:space-between"><div class="h1">Xử lý việc tồn</div><button class="btn secondary" onclick="closeModal('triageModal')">Đóng</button></div><div class="triageHero"><h2>${esc(t.title)}</h2><p>Đã tồn: <b>${debtAge(t)} ngày</b> · Dời: <b>${t.deferCount || 0} lần</b> · Thời lượng: <b>${t.duration}m</b></p><p class="warnText">Lý do: ${esc(t.reason || 'Chưa có')}</p></div><div class="row" style="margin-top:14px"><button class="btn" onclick="triageAction('${t.id}','today')">Làm hôm nay</button><button class="btn secondary" onclick="triageAction('${t.id}','schedule')">Xếp lịch</button><button class="btn secondary" onclick="triageAction('${t.id}','split')">Chia nhỏ</button><button class="btn ok" onclick="triageAction('${t.id}','done')">Done</button><button class="btn bad" onclick="triageAction('${t.id}','delete')">Xoá</button></div>` }
+    function triageAction(id, act) { if (act === 'today') doToday(id, false); if (act === 'schedule') scheduleDebt(id, false); if (act === 'split') splitTask(id, false); if (act === 'done') markDone(id); if (act === 'delete') deleteById(id, false); const next = stackTasks().sort((a, b) => debtAge(b) - debtAge(a))[0]; next ? renderTriage(next.id) : closeModal('triageModal'); render() }
+    function doToday(id, rerender = true) { const t = db.tasks.find(x => x.id === id); if (t) { pushUndo('Làm hôm nay'); t.date = fmtDate(new Date()); t.status = 'todo'; t.stackType = ''; t.reason = ''; t.deferCount = (t.deferCount || 0) + 1; selectedDate = t.date; save(); if (rerender) render(); toastUndo('Đã dời sang hôm nay') } }
+    // Dùng modal chọn ngày thay cho prompt().
+    function scheduleDebt(id, rerender = true) {
+      const modal = $('#scheduleModal');
+      const input = $('#scheduleDate');
+      input.value = selectedDate;
+      modal.classList.add('open');
+      $('#scheduleConfirmBtn').onclick = () => {
+        const d = input.value;
+        if (!d) return;
+        const t = db.tasks.find(x => x.id === id);
+        if (t) {
+          pushUndo('Xếp lịch việc tồn');
+          t.date = d;
+          t.status = 'todo';
+          t.stackType = '';
+          t.reason = '';
+          t.deferCount = (t.deferCount || 0) + 1;
+          selectedDate = d;
+          save();
+        }
+        modal.classList.remove('open');
+        if (rerender) render();
+        toastUndo('Đã xếp lịch')
+      };
+      $('#scheduleCancelBtn').onclick = () => modal.classList.remove('open');
+    }
+    function splitTask(id, rerender = true) { const t = db.tasks.find(x => x.id === id); if (!t) return; pushUndo('Chia nhỏ task'); const half = Math.max(15, Math.round((t.duration || 60) / 2)); db.tasks.push({ ...t, id: uid(), title: t.title + ' - phần 1', duration: half, status: 'todo', date: selectedDate, stackType: '', stackedAt: '', flow: defaultFlow(), createdAt: new Date().toISOString() }); db.tasks.push({ ...t, id: uid(), title: t.title + ' - phần 2', duration: Math.max(15, (t.duration || 60) - half), status: 'todo', date: selectedDate, stackType: '', stackedAt: '', flow: defaultFlow(), createdAt: new Date().toISOString() }); t.status = 'deleted'; save(); if (rerender) render(); toastUndo('Đã chia nhỏ task') }
+    function deleteById(id, rerender = true) { pushUndo('Xoá task'); db.tasks = db.tasks.filter(t => t.id !== id); save(); if (rerender) render(); toastUndo('Đã xoá task') }
+    function renderCalendar() { const d = parseDate(selectedDate); const first = new Date(d.getFullYear(), d.getMonth(), 1); const start = new Date(first); start.setDate(first.getDate() - ((first.getDay() + 6) % 7)); let days = ''; for (let i = 0; i < 42; i++) { const x = new Date(start); x.setDate(start.getDate() + i); const fd = fmtDate(x); const tasks = dayTasks(fd); days += `<div class="day ${x.getMonth() !== d.getMonth() ? 'off' : ''} ${fd === selectedDate ? 'sel' : ''}" onclick="selectCalendarDay('${fd}')" ondblclick="openTask(null,{date:'${fd}'})"><div class="num">${x.getDate()}</div><div class="dots">${tasks.slice(0, 6).map(t => `<span class="dot" title="${esc(t.title)}" style="background:${t.status === 'done' ? 'var(--ok)' : t.status === 'stack' ? 'var(--warn)' : 'var(--brand2)'}"></span>`).join('')}</div><div class="small muted">${tasks.length ? `${tasks.filter(t => t.status === 'done').length}/${tasks.length} done` : ''}</div></div>` } const events = eventsUpcoming(); $('#calendar').innerHTML = `<div class="row" style="margin-bottom:16px"><button class="btn" onclick="openEvent()">+ Sự kiện</button><span class="pill">Click ngày để chọn · Double click để thêm task</span><button class="btn secondary" onclick="goTab('timeline')">Mở timeline ngày chọn</button></div><div class="calendar">${['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(x => `<div class="dow">${x}</div>`).join('')}${days}</div><div class="card" style="margin-top:16px"><h3>Sự kiện + thời gian còn lại</h3><table class="table"><tr><th>Sự kiện</th><th>Ngày</th><th>Còn</th><th>Plan</th></tr>${events.map(e => `<tr><td>${esc(e.title)}</td><td>${e.date}</td><td>${e.days} ngày</td><td><button class="btn sm secondary" onclick="addPlanTask('${e.id}')">+ task chuẩn bị</button></td></tr>`).join('')}</table></div>` }
+    function selectCalendarDay(d) { selectedDate = d; $('#selectedDate').value = d; render() }
+    function openEvent() { $('#eTitle').value = ''; $('#eDate').value = selectedDate; $('#eType').value = 'solar'; $('#eRecurring').value = 'yes'; $('#eNotes').value = ''; openModal('eventModal') }
+    function saveEvent() { db.events.push({ id: uid(), title: $('#eTitle').value || 'Sự kiện', type: $('#eType').value, date: $('#eDate').value, recurring: $('#eRecurring').value === 'yes', notes: $('#eNotes').value }); save(); closeModal('eventModal'); render() }
+    function nextEvent() { return eventsUpcoming()[0] }
+    function eventsUpcoming() { const now = startOfDay(new Date()); return db.events.map(e => { let d = parseDate(e.date); if (e.recurring) { d = new Date(now.getFullYear(), d.getMonth(), d.getDate()); if (d < now) d = new Date(now.getFullYear() + 1, d.getMonth(), d.getDate()) } return { ...e, date: fmtDate(d), days: Math.ceil((d - now) / 86400000) } }).filter(e => e.days >= 0).sort((a, b) => a.days - b.days).slice(0, 12) }
+    function addPlanTask(eventId) { const e = db.events.find(x => x.id === eventId); openTask(null, { date: selectedDate, title: 'Chuẩn bị: ' + (e?.title || ''), duration: 60, priority: 'high', eventId }) }
+    function renderAnalytics() { const days = []; for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); const fd = fmtDate(d), s = stats(fd); days.push({ date: fd, done: s.donePct, focus: db.sessions.filter(x => x.date === fd).reduce((a, x) => a + Number(x.minutes || 0), 0) }) } const reasons = {}; stackTasks().forEach(t => { reasons[t.reason || 'Không rõ'] = (reasons[t.reason || 'Không rõ'] || 0) + 1 }); $('#analytics').innerHTML = `<div class="cards"><div class="card"><h3>Hoàn thành 7 ngày</h3><div class="chart">${days.map(d => `<div class="barv" style="height:${Math.max(4, d.done)}%" title="${d.date}: ${Math.round(d.done)}%"></div>`).join('')}</div></div><div class="card"><h3>Phút tập trung</h3><div class="chart">${days.map(d => `<div class="barv" style="height:${Math.min(100, d.focus)}%" title="${d.date}: ${d.focus}m"></div>`).join('')}</div></div><div class="card"><h3>Lý do tồn nhiều nhất</h3>${Object.entries(reasons).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `<p>${esc(k)}: <b>${v}</b></p>`).join('') || '<div class="muted">Chưa có việc tồn.</div>'}</div><div class="card"><h3>Gợi ý</h3>${analyticsInsight(days)}</div></div>` }
+    function analyticsInsight(days) { const avg = days.reduce((a, d) => a + d.done, 0) / days.length; const debt = stackTasks().length; let html = `<p>Hoàn thành trung bình: <b>${Math.round(avg)}%</b></p>`; if (avg < 50) html += '<p class="warnText">Nên giảm số task/ngày hoặc chia nhỏ task >90 phút.</p>'; if (debt > 3) html += '<p class="dangerText">Việc tồn đang cao. Hãy dùng Xử lý việc tồn.</p>'; return html }
+    function renderSettings() { $('#settings').innerHTML = `<div class="card" style="margin-bottom:16px"><h3>Giao diện</h3>${themePickerHTML()}</div><div class="form"><label>Giờ bắt đầu khả dụng<input class="input" type="time" id="setStart" value="${db.settings.availableStart}"></label><label>Giờ kết thúc khả dụng<input class="input" type="time" id="setEnd" value="${db.settings.availableEnd}"></label><label>Giới hạn việc chính hôm nay<input class="input" type="number" id="setMission" value="${db.settings.dailyMissionLimit}"></label><div class="full"><button class="btn" onclick="saveSettings()">Lưu settings</button></div></div><div class="card" style="margin-top:16px"><h3>Offline app</h3><p>Trạng thái hiện tại: <b>${navigator.onLine ? 'Online' : 'Offline'}</b>. App cache bằng service worker và dữ liệu vẫn lưu trong trình duyệt.</p></div>` }
+    function saveSettings() { db.settings.availableStart = $('#setStart').value; db.settings.availableEnd = $('#setEnd').value; db.settings.dailyMissionLimit = Number($('#setMission').value) || 3; save(); render(); toast('Đã lưu settings') }
+    function openModal(id) { $('#' + id).classList.add('open') } function closeModal(id) { $('#' + id).classList.remove('open') } function goTab(id) { currentTab = id; render() } window.goTab = goTab;
+    function exportData() { const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'timeline-focus-backup.json'; a.click(); URL.revokeObjectURL(a.href) }
+    function importData(e) { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { db = JSON.parse(r.result); normalize(); save(); render(); toast('Đã nhập dữ liệu') } catch (err) { toast('File không hợp lệ') } }; r.readAsText(f) }
+    function requestNotify() { if (!('Notification' in window)) { toast('Trình duyệt không hỗ trợ thông báo'); return } Notification.requestPermission().then(p => { db.settings.notifications = p === 'granted'; save(); toast(p === 'granted' ? 'Đã bật thông báo' : 'Chưa cấp quyền') }) }
+    function notify(title, body) { if (db.settings.notifications && Notification.permission === 'granted') new Notification(title, { body }); else toast(title + ' - ' + body) }
+    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => { }) }
+    window.openTask = openTask; window.openTaskDetail = openTaskDetail; window.closeModal = closeModal; window.quickDur = quickDur; window.quickAdd = quickAdd; window.autoSchedule = autoSchedule; window.timelineClick = timelineClick; window.markDone = markDone; window.startFocus = startFocus; window.moveToStack = moveToStack; window.openTriage = openTriage; window.doToday = doToday; window.scheduleDebt = scheduleDebt; window.splitTask = splitTask; window.deleteById = deleteById; window.triageAction = triageAction; window.renderTriage = renderTriage; window.pauseFocus = pauseFocus; window.completeFocus = completeFocus; window.closeFocusReview = closeFocusReview; window.focusReviewDone = focusReviewDone; window.focusReviewSave = focusReviewSave; window.focusReviewNextAction = focusReviewNextAction; window.focusReviewStack = focusReviewStack; window.addFocus = addFocus; window.setFocusPreset = setFocusPreset; window.selectCalendarDay = selectCalendarDay; window.openEvent = openEvent; window.addPlanTask = addPlanTask; window.saveSettings = saveSettings; window.setTheme = setTheme; window.updateTaskFilter = updateTaskFilter; window.updateFlowSummary = updateFlowSummary; window.addFlowItem = addFlowItem; window.removeFlowItem = removeFlowItem; window.toggleFlowCheck = toggleFlowCheck; window.undoLast = undoLast;
+    init();
+  </script>
+</body>
+
+</html>

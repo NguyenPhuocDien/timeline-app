@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/__/auth/:match*",
+      "destination": "https://timeline-app-9a872.firebaseapp.com/__/auth/:match*"
+    },
+    {
+      "source": "/__/firebase/init.json",
+      "destination": "https://timeline-app-9a872.firebaseapp.com/__/firebase/init.json"
+    }
+  ]
+}
