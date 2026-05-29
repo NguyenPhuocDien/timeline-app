@@ -220,12 +220,14 @@
     const appHost = window.location.hostname;
     const popupHosts = new Set(["localhost", "127.0.0.1"]);
     const usePopupAuth = popupHosts.has(appHost) || appHost.endsWith(".github.io");
-    const liveAuthDomain = usePopupAuth ? "timeline-app-9a872.firebaseapp.com" : "timeline-app-one-beta.vercel.app";
+    // Use the default Firebase auth domain until the custom Vercel domain is fully configured
+    // in Google Cloud OAuth redirect URIs. This is the most stable cross-device setup right now.
+    const firebaseAuthDomain = "timeline-app-9a872.firebaseapp.com";
 
     // 🔴 BẠN CẦN THAY THẾ ĐOẠN NÀY BẰNG FIREBASE CONFIG CỦA BẠN 🔴
     const firebaseConfig = {
       apiKey: "AIzaSyBaSHqy3Vo7tYmsimmTMz7BJARPxtFmwdI",
-      authDomain: liveAuthDomain,
+      authDomain: firebaseAuthDomain,
       projectId: "timeline-app-9a872",
       storageBucket: "timeline-app-9a872.firebasestorage.app",
       messagingSenderId: "217681480315",
