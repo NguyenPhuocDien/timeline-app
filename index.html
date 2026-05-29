@@ -218,13 +218,9 @@
     import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const appHost = window.location.hostname;
-    // FIX BUG-001: Dùng custom domain làm authDomain để tránh Storage Partitioning
-    // chặn cross-origin auth trên Chrome M115+, Safari, Firefox.
-    // Yêu cầu: domain này phải được thêm vào Firebase Console → Authorized Domains
-    // và GCP Console → OAuth 2.0 → Redirect URIs (thêm /__/auth/handler)
-    const firebaseAuthDomain = appHost === "localhost" || appHost === "127.0.0.1"
-      ? "timeline-app-9a872.firebaseapp.com"
-      : "timeline-app-one-beta.vercel.app";
+    // Sử dụng domain mặc định của Firebase. Chiến lược popup-first ở dưới 
+    // sẽ đảm bảo hoạt động cross-device (Safari/iOS) mà không bị lỗi Storage Partitioning
+    const firebaseAuthDomain = "timeline-app-9a872.firebaseapp.com";
 
     // 🔴 BẠN CẦN THAY THẾ ĐOẠN NÀY BẰNG FIREBASE CONFIG CỦA BẠN 🔴
     const firebaseConfig = {
