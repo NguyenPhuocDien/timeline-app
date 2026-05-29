@@ -722,7 +722,7 @@
     }
 
     /* ---- Section content padding ---- */
-    .section { display: none; padding: 20px 24px; }
+    .section { display: none; padding: 20px 24px; animation: sectionIn 0.15s ease; }
     .section.active { display: block; }
 
     /* ---- Buttons ---- */
@@ -1277,9 +1277,6 @@
     }
 
     /* Section fade transition */
-    .section { display: none; padding: 20px 24px; animation: sectionIn 0.15s ease; }
-    .section.active { display: block; }
-
     @keyframes sectionIn {
       from { opacity: 0; transform: translateY(4px); }
       to   { opacity: 1; transform: translateY(0); }

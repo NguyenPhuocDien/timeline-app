@@ -85,7 +85,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     function clamp(n, a, b) { return Math.max(a, Math.min(b, n)) }
     function pct(n) { return clamp(Math.round(n), 0, 100) }
     function esc(s) { return String(s ?? '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m])) }
-    function toast(msg, action = null) { const t = $('#toast'); t.innerHTML = `${esc(msg)}${action ? ` <button onclick="${action.fn}">${esc(action.label)}</button>` : ''}`; t.classList.add('show'); clearTimeout(toast._timer); toast._timer = setTimeout(() => t.classList.remove('show'), action ? 5200 : 2200) }
+    function toast(msg, action = null) { const t = $('#toast'); t.textContent = msg; if (action) { const b = document.createElement('button'); b.textContent = action.label; b.onclick = () => { if (typeof action.fn === 'function') action.fn(); else if (typeof action.fn === 'string' && window[action.fn.replace('()','')]) window[action.fn.replace('()','')](); }; t.appendChild(document.createTextNode(' ')); t.appendChild(b); } t.classList.add('show'); clearTimeout(toast._timer); toast._timer = setTimeout(() => t.classList.remove('show'), action ? 5200 : 2200) }
     function cloneDb() { return JSON.parse(JSON.stringify(db)) }
     function pushUndo(label) { undoStack.push({ label, db: cloneDb(), selectedDate }); if (undoStack.length > 20) undoStack.shift(); }
     function undoLast() { const item = undoStack.pop(); if (!item) return; db = item.db; selectedDate = item.selectedDate || selectedDate; normalize(); render(); toast(`Đã hoàn tác: ${item.label}`) }
@@ -862,6 +862,8 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       db.tasks.push({ ...t, id: uid(), title: t.title + ' – phần 2', duration: part2dur, status: 'todo', date: selectedDate, stackType: '', stackedAt: '', reason: '', flow: defaultFlow(), createdAt: nowIso, updatedAt: nowIso });
       // Xóa hẳn task gốc thay vì để rác status=deleted
       db.tasks = db.tasks.filter(x => x.id !== id);
+      // Xóa hẳn task gốc thay vì để rác status=deleted
+      db.tasks = db.tasks.filter(x => x.id !== id);
       save();
       if (rerender) render();
       toastUndo('Đã chia nhỏ thành 2 phần');
@@ -871,92 +873,6 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     function selectCalendarDay(d) { selectedDate = d; $('#selectedDate').value = d; render() }
     function openEvent() { $('#eTitle').value = ''; $('#eDate').value = selectedDate; $('#eType').value = 'solar'; $('#eRecurring').value = 'yes'; $('#eNotes').value = ''; openModal('eventModal') }
     function saveEvent() { const date = $('#eDate').value; if (!date) { toast('Vui lòng chọn ngày cho sự kiện.'); return; } db.events.push({ id: uid(), title: $('#eTitle').value || 'Sự kiện', type: $('#eType').value, date, recurring: $('#eRecurring').value === 'yes', notes: $('#eNotes').value }); save(); closeModal('eventModal'); render() }
-    function nextEvent() { return eventsUpcoming()[0] }
-    function eventsUpcoming() { const now = startOfDay(new Date()); return db.events.map(e => { let d = parseDate(e.date); if (e.recurring) { d = new Date(now.getFullYear(), d.getMonth(), d.getDate()); if (d < now) d = new Date(now.getFullYear() + 1, d.getMonth(), d.getDate()) } return { ...e, date: fmtDate(d), days: Math.ceil((d - now) / 86400000) } }).filter(e => e.days >= 0).sort((a, b) => a.days - b.days).slice(0, 12) }
-    function addPlanTask(eventId) { const e = db.events.find(x => x.id === eventId); openTask(null, { date: selectedDate, title: 'Chuẩn bị: ' + (e?.title || ''), duration: 60, priority: 'high', eventId }) }
-    function legacyRenderAnalytics() {
-      const days = [];
-      for (let i = 13; i >= 0; i--) {
-        const d = new Date(); d.setDate(d.getDate() - i);
-        const fd = fmtDate(d), s = stats(fd);
-        days.push({ date: fd, label: `${d.getMonth()+1}/${d.getDate()}`, done: s.donePct, focus: db.sessions.filter(x => x.date === fd).reduce((a,x) => a + Number(x.minutes||0), 0) });
-      }
-      const reasons = {};
-      stackTasks().forEach(t => { reasons[t.reason || 'Không rõ'] = (reasons[t.reason || 'Không rõ'] || 0) + 1 });
-      const totalFocus = db.sessions.reduce((a, x) => a + Number(x.minutes||0), 0);
-      const streak = calcStreak();
-
-      // SVG Line Chart for done%
-      const W = 400, H = 100, pad = 20;
-      const maxDone = Math.max(...days.map(d => d.done), 1);
-      const pts = days.map((d, i) => { const x = pad + (i / (days.length-1)) * (W - 2*pad); const y = H - pad - (d.done / maxDone) * (H - 2*pad); return [x, y]; });
-      const polyline = pts.map(([x,y]) => `${x},${y}`).join(' ');
-      const area = `${pts[0][0]},${H-pad} ` + polyline + ` ${pts[pts.length-1][0]},${H-pad}`;
-      const svgChart = `<svg class="lineChart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-        <defs><linearGradient id="lcGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--brand)" stop-opacity="0.5"/><stop offset="100%" stop-color="var(--brand)" stop-opacity="0"/></linearGradient></defs>
-        <polygon class="lc-area" points="${area}"/>
-        <polyline class="lc-line" points="${polyline}"/>
-        ${pts.map(([x,y],i) => `<circle class="lc-dot" cx="${x}" cy="${y}" r="3"/><text class="lc-label" x="${x}" y="${H-2}" text-anchor="middle">${days[i].label}</text>`).join('')}
-      </svg>`;
-
-      // GitHub heatmap for sessions
-      const heatData = {}; db.sessions.forEach(s => { heatData[s.date] = (heatData[s.date]||0) + Number(s.minutes||0); });
-      const maxH = Math.max(...Object.values(heatData), 1);
-      const heatCells = [];
-      for (let i = 51; i >= 0; i--) {
-        const col = [];
-        for (let j = 6; j >= 0; j--) {
-          const d2 = new Date(); d2.setDate(d2.getDate() - (i*7 + j));
-          const fd2 = fmtDate(d2); const v = heatData[fd2] || 0;
-          const level = v === 0 ? 0 : v < maxH*0.25 ? 1 : v < maxH*0.5 ? 2 : v < maxH*0.75 ? 3 : 4;
-          col.push(`<div class="heatmap-cell" data-level="${level}" title="${fd2}: ${v}m focus"></div>`);
-        }
-        heatCells.push(`<div class="heatmap-col">${col.join('')}</div>`);
-      }
-
-      $('#analytics').innerHTML = `
-        <div class="cards" style="margin-bottom:16px">
-          <div class="card"><h3>Tổng session</h3><div class="big">${db.sessions.length}</div><div class="small muted">${durText(totalFocus)} tập trung</div></div>
-          <div class="card"><h3>Streak hiện tại</h3><div class="big">${streak} ngày</div><div class="small muted">Liên tiếp có task done</div></div>
-          <div class="card"><h3>Việc tồn</h3><div class="big">${stackTasks().length}</div><div class="small muted">Cần xử lý</div></div>
-          <div class="card"><h3>Trung bình 7 ngày</h3><div class="big">${Math.round(days.slice(-7).reduce((a,d)=>a+d.done,0)/7)}%</div><div class="small muted">Hoàn thành task</div></div>
-        </div>
-        <div class="card" style="margin-bottom:16px">
-          <h3>Tỷ lệ hoàn thành 14 ngày</h3>
-          ${svgChart}
-        </div>
-        <div class="card" style="margin-bottom:16px">
-          <h3>Focus heatmap (52 tuần)</h3>
-          <div class="heatmap">${heatCells.join('')}</div>
-          <div class="row" style="margin-top:8px;gap:6px;align-items:center">
-            <span class="small muted">Ít</span>
-            ${[0,1,2,3,4].map(l=>`<div class="heatmap-cell" data-level="${l}" style="width:12px;height:12px;min-width:12px"></div>`).join('')}
-            <span class="small muted">Nhiều</span>
-          </div>
-        </div>
-        <div class="cards">
-          <div class="card"><h3>Lý do tồn nhiều nhất</h3>${Object.entries(reasons).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>`<p>${esc(k)}: <b>${v}</b></p>`).join('')||'<div class="muted">Chưa có việc tồn.</div>'}</div>
-          <div class="card"><h3>Gợi ý cải thiện</h3>${analyticsInsight(days)}</div>
-        </div>`;
-    }
-    function calcStreak() {
-      let streak = 0; const today = fmtDate(new Date());
-      for (let i = 0; i < 365; i++) {
-        const d = new Date(); d.setDate(d.getDate() - i);
-        const fd = fmtDate(d);
-        if (fd > today) continue;
-        const done = db.tasks.some(t => t.date === fd && t.status === 'done');
-        if (done) streak++; else break;
-      }
-      return streak;
-    }
-    function legacyAnalyticsInsight(days) { const avg = days.reduce((a, d) => a + d.done, 0) / days.length; const debt = stackTasks().length; let html = `<p>Hoàn thành trung bình: <b>${Math.round(avg)}%</b></p>`; if (avg < 50) html += '<p class="warnText">Nên giảm số task/ngày hoặc chia nhỏ task >90 phút.</p>'; if (debt > 3) html += '<p class="dangerText">Việc tồn đang cao. Hãy dùng Xử lý việc tồn.</p>'; return html }
-    function legacyRenderSettings() { $('#settings').innerHTML = `<div class="card" style="margin-bottom:16px"><h3>Giao diện</h3>${themePickerHTML()}</div><div class="form"><label>Giờ bắt đầu khả dụng<input class="input" type="time" id="setStart" value="${db.settings.availableStart}"></label><label>Giờ kết thúc khả dụng<input class="input" type="time" id="setEnd" value="${db.settings.availableEnd}"></label><label>Giới hạn việc chính hôm nay<input class="input" type="number" id="setMission" value="${db.settings.dailyMissionLimit}"></label><div class="full"><button class="btn" onclick="saveSettings()">Lưu settings</button></div></div><div class="card" style="margin-top:16px"><h3>Offline app</h3><p>Trạng thái hiện tại: <b>${navigator.onLine ? 'Online' : 'Offline'}</b>. App cache bằng service worker và dữ liệu vẫn lưu trong trình duyệt.</p></div>` }
-    function legacySaveSettings() { db.settings.availableStart = $('#setStart').value; db.settings.availableEnd = $('#setEnd').value; db.settings.dailyMissionLimit = Number($('#setMission').value) || 3; save(); render(); toast('Đã lưu settings') }
-    function analyticsDaySnapshot(fd) {
-      const s = stats(fd);
-      const focus = db.sessions.filter(x => x.date === fd).reduce((a, x) => a + Number(x.minutes || 0), 0);
-      return {
         date: fd,
         label: fd.slice(5).replace('-', '/'),
         done: Math.round(s.donePct || 0),
@@ -995,7 +911,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
           const fd2 = fmtDate(d2);
           const v = heatData[fd2] || 0;
           const level = v === 0 ? 0 : v < maxHeat * 0.25 ? 1 : v < maxHeat * 0.5 ? 2 : v < maxHeat * 0.75 ? 3 : 4;
-          col.push(`<button class="heatmap-cell" data-level="${level}" title="${fd2}: ${v}m focus" onclick="setAnalyticsPreview('${fd2}')"></button>`);
+          col.push(`<button class="heatmap-cell" data-level="${level}" aria-label="${fd2}: ${v} phút" title="${fd2}: ${v}m focus" onclick="setAnalyticsPreview('${fd2}')"></button>`);
         }
         heatCells.push(`<div class="heatmap-col">${col.join('')}</div>`);
       }
@@ -1067,6 +983,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
           // Schema validation: phải là object, có ít nhất tasks array
           if (!raw || typeof raw !== 'object') throw new Error('Not an object');
           if (!Array.isArray(raw.tasks)) throw new Error('Missing tasks array');
+          if (raw._version && raw._version > 1) toast('Lưu ý: File backup này từ phiên bản mới hơn.');
           // Sanitize: chỉ lấy các field đã biết, bỏ qua field lạ
           const safe = {
             tasks:    raw.tasks.filter(t => t && typeof t === 'object' && typeof t.title === 'string'),

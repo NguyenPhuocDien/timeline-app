@@ -74,17 +74,14 @@ self.addEventListener('fetch', event => {
   const isStatic = /\.(png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|css|js)$/i.test(url.pathname);
 
   if (isHTML) {
-    // Stale-While-Revalidate cho HTML
+    // Network-First cho HTML để tránh lỗi cache code cũ (BUG-004)
     event.respondWith(
-      caches.open(CACHE_STATIC).then(cache =>
-        cache.match(event.request).then(cached => {
-          const networkFetch = fetch(event.request).then(response => {
-            if (response.ok) cache.put(event.request, response.clone());
-            return response;
-          }).catch(() => cached || new Response('Offline', { status: 503 }));
-          return cached || networkFetch;
-        })
-      )
+      fetch(event.request).then(response => {
+        if (response.ok) {
+          caches.open(CACHE_STATIC).then(c => c.put(event.request, response.clone()));
+        }
+        return response;
+      }).catch(() => caches.match(event.request).then(c => c || new Response('Offline', { status: 503 })))
     );
   } else if (isStatic) {
     // Cache-first cho static assets

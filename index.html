@@ -47,7 +47,7 @@
   <meta property="og:type" content="website">
   <meta property="og:title" content="Timeline Focus — Quản Lý Thời Gian Cá Nhân">
   <meta property="og:description" content="Lập kế hoạch ngày, timeline, focus timer và quản lý task offline-first.">
-  <meta property="og:image" content="img/icon-512.png">
+  <meta property="og:image" content="https://timeline-app-one-beta.vercel.app/img/icon-512.png">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Timeline Focus">
   <meta name="twitter:description" content="Quản lý thời gian cá nhân offline-first.">
@@ -106,7 +106,7 @@
     </main>
     <aside class="insight" id="insight"></aside>
   </div>
-  <nav class="mobileTabs" id="mobileTabs"></nav>
+  <nav class="mobileTabs" id="mobileTabs" role="navigation" aria-label="Mobile tabs"></nav>
   <div class="modal" id="taskModal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
     <div class="dialog">
       <div class="row" style="justify-content:space-between;margin-bottom:12px">
@@ -218,11 +218,13 @@
     import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const appHost = window.location.hostname;
-    const popupHosts = new Set(["localhost", "127.0.0.1"]);
-    const usePopupAuth = popupHosts.has(appHost) || appHost.endsWith(".github.io");
-    // Use the default Firebase auth domain until the custom Vercel domain is fully configured
-    // in Google Cloud OAuth redirect URIs. This is the most stable cross-device setup right now.
-    const firebaseAuthDomain = "timeline-app-9a872.firebaseapp.com";
+    // FIX BUG-001: Dùng custom domain làm authDomain để tránh Storage Partitioning
+    // chặn cross-origin auth trên Chrome M115+, Safari, Firefox.
+    // Yêu cầu: domain này phải được thêm vào Firebase Console → Authorized Domains
+    // và GCP Console → OAuth 2.0 → Redirect URIs (thêm /__/auth/handler)
+    const firebaseAuthDomain = appHost === "localhost" || appHost === "127.0.0.1"
+      ? "timeline-app-9a872.firebaseapp.com"
+      : "timeline-app-one-beta.vercel.app";
 
     // 🔴 BẠN CẦN THAY THẾ ĐOẠN NÀY BẰNG FIREBASE CONFIG CỦA BẠN 🔴
     const firebaseConfig = {
@@ -255,15 +257,20 @@
       if (!auth) return toast("⚠️ Vui lòng cấu hình firebaseConfig trong file code trước khi dùng!");
       const provider = new GoogleAuthProvider();
       try {
-        if (usePopupAuth) {
-          await signInWithPopup(auth, provider);
-          return;
-        }
-        toast("Đang chuyển sang Google để đăng nhập...");
-        await signInWithRedirect(auth, provider);
+        // FIX BUG-001: Luôn thử popup trước — hoạt động tốt nhất cross-device
+        // vì tránh hoàn toàn vấn đề Storage Partitioning của redirect flow.
+        const btn = document.getElementById('loginBtn');
+        if (btn) btn.innerHTML = '⏳ Đang xử lý...';
+        await signInWithPopup(auth, provider);
       } catch (err) {
-        if (usePopupAuth && ["auth/popup-blocked", "auth/cancelled-popup-request"].includes(err?.code)) {
-          toast("❌ Trình duyệt đã chặn popup đăng nhập. Hãy cho phép popup rồi thử lại.");
+        if (["auth/popup-blocked", "auth/cancelled-popup-request"].includes(err?.code)) {
+          // Popup bị chặn → fallback sang redirect
+          toast("Popup bị chặn, đang chuyển sang Google...");
+          try {
+            await signInWithRedirect(auth, provider);
+          } catch (e2) {
+            toast("❌ Đăng nhập thất bại: " + (e2?.message || e2));
+          }
           return;
         }
         toast("❌ Đăng nhập thất bại: " + (err?.message || err));
@@ -282,7 +289,8 @@
         const btn = document.getElementById('loginBtn');
         if (user) {
           window.currentUserId = user.uid;
-          if (btn) btn.innerHTML = `👤 ${user.displayName.split(' ')[0]} (Đăng xuất)`;
+          const displayName = user.displayName?.split(' ')[0] || user.email?.split('@')[0] || 'User';
+          if (btn) btn.innerHTML = `👤 ${displayName} (Đăng xuất)`;
           if (btn) btn.onclick = window.firebaseLogout;
           toast("✅ Đã kết nối Cloud: " + user.email);
           if (window.currentTab === 'settings') render();
