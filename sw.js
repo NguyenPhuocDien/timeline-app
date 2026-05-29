@@ -1,7 +1,7 @@
-// Timeline Focus Service Worker — v8
+// Timeline Focus Service Worker — v9
 // Strategy: Cache-first for static, Stale-While-Revalidate for HTML, Network-first for dynamic
-const CACHE_STATIC = 'tl-focus-static-v8';
-const CACHE_DYNAMIC = 'tl-focus-dynamic-v8';
+const CACHE_STATIC = 'tl-focus-static-v9';
+const CACHE_DYNAMIC = 'tl-focus-dynamic-v9';
 
 // Critical: SW install thất bại nếu thiếu những file này
 const CRITICAL_ASSETS = [

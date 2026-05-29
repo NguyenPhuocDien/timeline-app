@@ -335,7 +335,9 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
 
       // Register SW
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js').catch(err => console.warn('[SW]', err));
+        navigator.serviceWorker
+          .register('./sw.js?v=9', { updateViaCache: 'none' })
+          .catch(err => console.warn('[SW]', err));
       }
     }
     const tabIcons = { dashboard: '🏠', timeline: '⏱', tasks: '✅', focus: '🎯', debt: '📦', calendar: '📅', analytics: '📊', settings: '⚙️' };
