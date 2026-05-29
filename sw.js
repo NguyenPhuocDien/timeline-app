@@ -7,6 +7,8 @@ const CACHE_DYNAMIC = 'tl-focus-dynamic-v8';
 const CRITICAL_ASSETS = [
   './',
   './index.html',
+  './app.js',
+  './style.css',
   './manifest.webmanifest',
   './icon.svg',
   './img/icon-192.png',
@@ -69,7 +71,7 @@ self.addEventListener('fetch', event => {
   if (url.origin !== location.origin && !url.hostname.includes('fonts.g')) return;
 
   const isHTML = event.request.headers.get('accept')?.includes('text/html');
-  const isStatic = /\.(png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|css)$/i.test(url.pathname);
+  const isStatic = /\.(png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|css|js)$/i.test(url.pathname);
 
   if (isHTML) {
     // Stale-While-Revalidate cho HTML

@@ -34,6 +34,8 @@ jobs:
           cp index.html _site/index.html
           cp index.html _site/404.html
           cp index_v1.html _site/index_v1.html
+          cp app.js _site/app.js
+          cp style.css _site/style.css
           cp sw.js _site/sw.js
           cp manifest.webmanifest _site/manifest.webmanifest
           cp icon.svg _site/icon.svg
