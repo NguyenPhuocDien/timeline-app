@@ -1,7 +1,7 @@
 <!doctype html>
 <!--
- Há» vÃ  tÃªn : Nguyá»…n PhÆ°á»›c Äiá»n | MSSV: 21002595
- MÃ´n       : ChuyÃªn ngÃ nh | BÃ i: Timeline Focus App
+ Họ và tên : Nguyễn Phước Điền | MSSV: 21002595
+ Môn       : Chuyên ngành | Bài: Timeline Focus App
 -->
 
 <html lang="vi">
@@ -9,9 +9,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Timeline Focus â€” Quáº£n LÃ½ Thá»i Gian CÃ¡ NhÃ¢n</title>
-  <meta name="description" content="Timeline Focus: láº­p káº¿ hoáº¡ch ngÃ y, theo dÃµi task, focus timer vÃ  quáº£n lÃ½ thá»i gian offline-first trÃªn má»i thiáº¿t bá»‹.">
-  <meta name="keywords" content="timeline, focus, planner, task, quáº£n lÃ½ thá»i gian, productivity">
+  <title>Timeline Focus — Quản Lý Thời Gian Cá Nhân</title>
+  <meta name="description" content="Timeline Focus: lập kế hoạch ngày, theo dõi task, focus timer và quản lý thời gian offline-first trên mọi thiết bị.">
+  <meta name="keywords" content="timeline, focus, planner, task, quản lý thời gian, productivity">
   <meta name="author" content="Timeline Focus">
   <link rel="canonical" href="https://timeline-app-one-beta.vercel.app/">
   <script>
@@ -45,12 +45,12 @@
 
   <!-- Open Graph / Social -->
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Timeline Focus â€” Quáº£n LÃ½ Thá»i Gian CÃ¡ NhÃ¢n">
-  <meta property="og:description" content="Láº­p káº¿ hoáº¡ch ngÃ y, timeline, focus timer vÃ  quáº£n lÃ½ task offline-first.">
+  <meta property="og:title" content="Timeline Focus — Quản Lý Thời Gian Cá Nhân">
+  <meta property="og:description" content="Lập kế hoạch ngày, timeline, focus timer và quản lý task offline-first.">
   <meta property="og:image" content="https://timeline-app-one-beta.vercel.app/img/icon-512.png">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Timeline Focus">
-  <meta name="twitter:description" content="Quáº£n lÃ½ thá»i gian cÃ¡ nhÃ¢n offline-first.">
+  <meta name="twitter:description" content="Quản lý thời gian cá nhân offline-first.">
 
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -61,9 +61,9 @@
 </head>
 
 <body>
-  <a href="#main-content" class="skip-link">Chuyá»ƒn Ä‘áº¿n ná»™i dung chÃ­nh</a>
+  <a href="#main-content" class="skip-link">Chuyển đến nội dung chính</a>
   <div class="app" id="app">
-    <aside class="side" id="sidebar" aria-label="Thanh Ä‘iá»u hÆ°á»›ng">
+    <aside class="side" id="sidebar" aria-label="Thanh điều hướng">
       <div style="position:relative">
         <div class="sideBrand">
           <img src="img/campus-logo.png" alt="IUH Logo" width="32" height="32" onerror="this.style.display='none'">
@@ -72,15 +72,15 @@
             <div class="sub">Personal planner</div>
           </div>
         </div>
-        <button class="sideCollapseBtn" id="sideCollapseBtn" aria-label="Thu gá»n sidebar" title="Thu gá»n sidebar">&#8249;</button>
+        <button class="sideCollapseBtn" id="sideCollapseBtn" aria-label="Thu gọn sidebar" title="Thu gọn sidebar">&#8249;</button>
       </div>
-      <nav class="nav" id="nav" aria-label="Menu chÃ­nh"></nav>
+      <nav class="nav" id="nav" aria-label="Menu chính"></nav>
       <div class="sideActions">
-        <button class="btn secondary" id="loginBtn">&#128273; ÄÄƒng nháº­p Äá»“ng bá»™</button>
-        <button class="btn secondary" id="exportBtn">&#8593; Xuáº¥t dá»¯ liá»‡u</button>
-        <button class="btn secondary" id="importBtn">&#8595; Nháº­p dá»¯ liá»‡u</button>
-        <button class="btn secondary" id="themeBtn">&#9680; Giao diá»‡n</button>
-        <button class="btn secondary" id="notifyBtn">&#128276; ThÃ´ng bÃ¡o</button>
+        <button class="btn secondary" id="loginBtn">&#128273; Đăng nhập Đồng bộ</button>
+        <button class="btn secondary" id="exportBtn">&#8593; Xuất dữ liệu</button>
+        <button class="btn secondary" id="importBtn">&#8595; Nhập dữ liệu</button>
+        <button class="btn secondary" id="themeBtn">&#9680; Giao diện</button>
+        <button class="btn secondary" id="notifyBtn">&#128276; Thông báo</button>
       </div>
     
     <div class="legalLinks" style="padding:12px;font-size:11px;color:var(--muted, #999);text-align:center;border-top:1px solid var(--line, #e5e7eb);margin-top:auto">
@@ -98,8 +98,8 @@
           <div class="topMeta"><div class="clock" id="clock" aria-live="polite"></div><div class="clock" id="netStatus" aria-live="polite"></div></div>
         </div>
         <div class="topControls">
-          <input class="input" type="date" id="selectedDate" style="width:170px" aria-label="NgÃ y Ä‘ang xem">
-          <button class="btn" id="openTaskBtn" title="ThÃªm task má»›i (N)">+ Task</button>
+          <input class="input" type="date" id="selectedDate" style="width:170px" aria-label="Ngày đang xem">
+          <button class="btn" id="openTaskBtn" title="Thêm task mới (N)">+ Task</button>
           <button class="btn secondary" onclick="window.print()" title="In trang" style="padding:7px 10px" aria-label="In">&#128438;</button>
         </div>
       </div>
@@ -112,29 +112,28 @@
       <section id="analytics" class="section"></section>
       <section id="settings" class="section"></section>
     </main>
-    <aside class="insight" id="insight">
-  </aside>
+    <aside class="insight" id="insight"></aside>
   </div>
   <nav class="mobileTabs" id="mobileTabs" role="navigation" aria-label="Mobile tabs"></nav>
   <div class="modal" id="taskModal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
     <div class="dialog">
       <div class="row" style="justify-content:space-between;margin-bottom:12px">
-        <div class="h1" id="taskModalTitle">ThÃªm task</div><button class="btn secondary"
-          onclick="closeModal('taskModal')" aria-label="ÄÃ³ng modal">âœ• ÄÃ³ng</button>
+        <div class="h1" id="taskModalTitle">Thêm task</div><button class="btn secondary"
+          onclick="closeModal('taskModal')" aria-label="Đóng modal">✕ Đóng</button>
       </div>
       <div class="form">
-        <label>TiÃªu Ä‘á»<input class="input" id="fTitle"></label>
-        <label>NgÃ y<input class="input" id="fDate" type="date"></label>
-        <label>Duration phÃºt<input class="input" id="fDuration" type="number" min="5" step="5"></label>
+        <label>Tiêu đề<input class="input" id="fTitle"></label>
+        <label>Ngày<input class="input" id="fDate" type="date"></label>
+        <label>Duration phút<input class="input" id="fDuration" type="number" min="5" step="5"></label>
         <label>Priority<select id="fPriority">
             <option value="high">Cao</option>
-            <option value="medium">Vá»«a</option>
-            <option value="low">Tháº¥p</option>
+            <option value="medium">Vừa</option>
+            <option value="low">Thấp</option>
           </select></label>
-        <label>Báº¯t Ä‘áº§u<input class="input" id="fStart" type="time"></label>
-        <label>Káº¿t thÃºc<input class="input" id="fEnd" type="time"></label>
+        <label>Bắt đầu<input class="input" id="fStart" type="time"></label>
+        <label>Kết thúc<input class="input" id="fEnd" type="time"></label>
         <label>Deadline<input class="input" id="fDeadline" type="time"></label>
-        <label>Tráº¡ng thÃ¡i<select id="fStatus">
+        <label>Trạng thái<select id="fStatus">
             <option value="todo">todo</option>
             <option value="doing">doing</option>
             <option value="done">done</option>
@@ -142,12 +141,12 @@
             <option value="stack">stack</option>
           </select></label>
         <label>Tag<input class="input" id="fTags" placeholder="#study #work"></label>
-        <label>LiÃªn káº¿t sá»± kiá»‡n<select id="fEvent"></select></label>
-        <label class="full">Ghi chÃº<textarea id="fNotes"></textarea></label>
-        <div class="checks full"><label><input type="checkbox" id="fMission"> Viá»‡c chÃ­nh hÃ´m nay</label><label><input
+        <label>Liên kết sự kiện<select id="fEvent"></select></label>
+        <label class="full">Ghi chú<textarea id="fNotes"></textarea></label>
+        <div class="checks full"><label><input type="checkbox" id="fMission"> Việc chính hôm nay</label><label><input
               type="checkbox" id="fDone"> Done</label></div>
-        <div class="full row"><button class="btn" id="saveTaskBtn">LÆ°u</button><button class="btn secondary"
-            id="deleteTaskBtn">XoÃ¡</button><button class="btn ghost" type="button"
+        <div class="full row"><button class="btn" id="saveTaskBtn">Lưu</button><button class="btn secondary"
+            id="deleteTaskBtn">Xoá</button><button class="btn ghost" type="button"
             onclick="quickDur(25)">25m</button><button class="btn ghost" type="button"
             onclick="quickDur(50)">50m</button><button class="btn ghost" type="button"
             onclick="quickDur(90)">90m</button><button class="btn ghost" type="button"
@@ -155,65 +154,65 @@
       </div>
     </div>
   </div>
-  <div class="modal" id="taskDetailModal" role="dialog" aria-modal="true" aria-label="Chi tiáº¿t task">
+  <div class="modal" id="taskDetailModal" role="dialog" aria-modal="true" aria-label="Chi tiết task">
     <div class="dialog detail" id="taskDetailContent"></div>
   </div>
-  <div class="modal" id="eventModal" role="dialog" aria-modal="true" aria-label="ThÃªm sá»± kiá»‡n">
+  <div class="modal" id="eventModal" role="dialog" aria-modal="true" aria-label="Thêm sự kiện">
     <div class="dialog">
       <div class="row" style="justify-content:space-between;margin-bottom:12px">
-        <div class="h1">ThÃªm sá»± kiá»‡n</div><button class="btn secondary" onclick="closeModal('eventModal')">ÄÃ³ng</button>
+        <div class="h1">Thêm sự kiện</div><button class="btn secondary" onclick="closeModal('eventModal')">Đóng</button>
       </div>
       <div class="form">
-        <label>TÃªn sá»± kiá»‡n<input class="input" id="eTitle"></label>
-        <label>Loáº¡i<select id="eType">
-            <option value="solar">DÆ°Æ¡ng lá»‹ch</option>
-            <option value="lunar">Ã‚m lá»‹ch tham kháº£o</option>
+        <label>Tên sự kiện<input class="input" id="eTitle"></label>
+        <label>Loại<select id="eType">
+            <option value="solar">Dương lịch</option>
+            <option value="lunar">Âm lịch tham khảo</option>
           </select></label>
-        <label>NgÃ y<input class="input" id="eDate" type="date"></label>
-        <label>Láº·p láº¡i<select id="eRecurring">
-            <option value="yes">Háº±ng nÄƒm</option>
-            <option value="no">Má»™t láº§n</option>
+        <label>Ngày<input class="input" id="eDate" type="date"></label>
+        <label>Lặp lại<select id="eRecurring">
+            <option value="yes">Hằng năm</option>
+            <option value="no">Một lần</option>
           </select></label>
-        <label class="full">Ghi chÃº<textarea id="eNotes"></textarea></label>
-        <div class="full"><button class="btn" id="saveEventBtn">LÆ°u sá»± kiá»‡n</button></div>
+        <label class="full">Ghi chú<textarea id="eNotes"></textarea></label>
+        <div class="full"><button class="btn" id="saveEventBtn">Lưu sự kiện</button></div>
       </div>
     </div>
   </div>
-  <div class="modal" id="triageModal" role="dialog" aria-modal="true" aria-label="Xá»­ lÃ½ viá»‡c tá»“n">
+  <div class="modal" id="triageModal" role="dialog" aria-modal="true" aria-label="Xử lý việc tồn">
     <div class="dialog">
       <div id="triageContent"></div>
     </div>
   </div>
   <input type="file" id="importFile" accept="application/json" hidden>
-  <div class="modal" id="scheduleModal" role="dialog" aria-modal="true" aria-label="LÃªn lá»‹ch ngÃ y">
+  <div class="modal" id="scheduleModal" role="dialog" aria-modal="true" aria-label="Lên lịch ngày">
     <div class="dialog" style="max-width:400px">
       <div class="row" style="justify-content:space-between;margin-bottom:16px">
-        <div class="h1" style="font-size:22px">LÃªn lá»‹ch ngÃ y</div>
-        <button class="btn secondary" id="scheduleCancelBtn">ÄÃ³ng</button>
+        <div class="h1" style="font-size:22px">Lên lịch ngày</div>
+        <button class="btn secondary" id="scheduleCancelBtn">Đóng</button>
       </div>
-      <p class="muted" style="margin:0 0 12px">Chá»n ngÃ y muá»‘n xáº¿p láº¡i task ná»£ nÃ y:</p>
+      <p class="muted" style="margin:0 0 12px">Chọn ngày muốn xếp lại task nợ này:</p>
       <input class="input" type="date" id="scheduleDate" style="margin-bottom:14px">
-      <button class="btn" id="scheduleConfirmBtn" style="width:100%">XÃ¡c nháº­n</button>
+      <button class="btn" id="scheduleConfirmBtn" style="width:100%">Xác nhận</button>
     </div>
   </div>
-  <div class="modal" id="focusReviewModal" role="dialog" aria-modal="true" aria-label="Review phiÃªn táº­p trung">
+  <div class="modal" id="focusReviewModal" role="dialog" aria-modal="true" aria-label="Review phiên tập trung">
     <div class="dialog" style="max-width:620px">
       <div class="row" style="justify-content:space-between;margin-bottom:12px">
         <div>
-          <div class="h1">Review phiÃªn táº­p trung</div>
+          <div class="h1">Review phiên tập trung</div>
           <div class="muted small" id="focusReviewMeta"></div>
         </div>
-        <button class="btn secondary" onclick="closeFocusReview()">ÄÃ³ng</button>
+        <button class="btn secondary" onclick="closeFocusReview()">Đóng</button>
       </div>
       <label class="small muted" style="font-weight:700;text-transform:uppercase">Focus log</label>
       <textarea id="focusReviewLog" style="margin:6px 0 12px"></textarea>
       <label class="small muted" style="font-weight:700;text-transform:uppercase">Next action</label>
-      <input class="input" id="focusReviewNext" placeholder="BÆ°á»›c tiáº¿p theo náº¿u task chÆ°a xong" style="margin:6px 0 14px">
+      <input class="input" id="focusReviewNext" placeholder="Bước tiếp theo nếu task chưa xong" style="margin:6px 0 14px">
       <div class="row">
-        <button class="btn ok" onclick="focusReviewDone()">ÄÃ¡nh dáº¥u Done</button>
-        <button class="btn secondary" onclick="focusReviewSave()">ThÃªm log</button>
-        <button class="btn secondary" onclick="focusReviewNextAction()">Táº¡o bÆ°á»›c tiáº¿p theo</button>
-        <button class="btn warn" onclick="focusReviewStack()">ÄÆ°a vÃ o viá»‡c tá»“n</button>
+        <button class="btn ok" onclick="focusReviewDone()">Đánh dấu Done</button>
+        <button class="btn secondary" onclick="focusReviewSave()">Thêm log</button>
+        <button class="btn secondary" onclick="focusReviewNextAction()">Tạo bước tiếp theo</button>
+        <button class="btn warn" onclick="focusReviewStack()">Đưa vào việc tồn</button>
       </div>
     </div>
   </div>
