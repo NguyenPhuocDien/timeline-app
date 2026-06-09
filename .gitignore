@@ -3,3 +3,7 @@ logs/
 node_modules/
 playwright-report/
 test-results/
+
+# Phase B backup folders
+.backup-*/
+

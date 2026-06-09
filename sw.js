@@ -1,112 +1,177 @@
-// Timeline Focus Service Worker — v9
-// Strategy: Cache-first for static, Stale-While-Revalidate for HTML, Network-first for dynamic
-const CACHE_STATIC = 'tl-focus-static-v9';
-const CACHE_DYNAMIC = 'tl-focus-dynamic-v9';
+/**
+ * Timeline Focus — Service Worker v10
+ *
+ * Strategy:
+ *   - HTML: network-first (luôn lấy bản mới, fallback cache khi offline)
+ *   - JS/CSS/img: cache-first với revalidate background
+ *   - Firebase API: KHÔNG cache (Firebase SDK có IndexedDB persistence riêng)
+ *   - Sentry: KHÔNG cache
+ *
+ * Tăng CACHE_VERSION khi:
+ *   - Đổi cấu trúc cache (thêm/bớt resource)
+ *   - Cần force invalidate cache cũ
+ *
+ * App.js register: navigator.serviceWorker.register('./sw.js?v=10', { updateViaCache: 'none' })
+ * → updateViaCache: 'none' đảm bảo SW file luôn fetch từ network (không cache SW)
+ */
 
-// Critical: SW install thất bại nếu thiếu những file này
-const CRITICAL_ASSETS = [
+const CACHE_VERSION = 'tlf-v10';
+const CACHE_NAME = `${CACHE_VERSION}-static`;
+const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
+
+// Pre-cache các file core khi install
+const PRECACHE_URLS = [
   './',
   './index.html',
   './app.js',
   './style.css',
   './manifest.webmanifest',
-  './icon.svg',
-  './img/icon-192.png',
-  './img/icon-512.png'
 ];
 
-// Optional: cố gắng cache, không block install nếu thiếu
-const OPTIONAL_ASSETS = [
-  './img/campus-bg.png',
-  './img/campus-building.png',
-  './img/campus-logo.png'
+// Domains/paths KHÔNG bao giờ cache (xử lý riêng Firebase, Sentry, analytics)
+const NEVER_CACHE_PATTERNS = [
+  /firebaseio\.com/,
+  /googleapis\.com/,
+  /firebase\.com/,
+  /firebaseapp\.com/,
+  /gstatic\.com\/firebasejs/,  // Firebase SDK - tự revalidate
+  /sentry\.io/,
+  /ingest\.sentry\.io/,
+  /plausible\.io/,
+  /umami/,
 ];
 
-// Install: cache critical assets bắt buộc, optional assets best-effort
-self.addEventListener('install', event => {
+// ─── INSTALL ────────────────────────────────────────────────────────────────
+self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_STATIC).then(cache =>
-      // Critical phải thành công
-      cache.addAll(CRITICAL_ASSETS).then(() =>
-        // Optional: thử từng file, bỏ qua nếu lỗi
-        Promise.allSettled(
-          OPTIONAL_ASSETS.map(url =>
-            cache.add(url).catch(err => console.warn('[SW] Optional asset skipped:', url, err))
-          )
+    caches.open(CACHE_NAME).then((cache) => {
+      // addAll fail-fast: nếu 1 file fail thì toàn bộ install fail
+      // → dùng Promise.allSettled để tolerant với 404 lẻ tẻ
+      return Promise.allSettled(
+        PRECACHE_URLS.map((url) =>
+          fetch(url, { cache: 'reload' })
+            .then((res) => {
+              if (res.ok) return cache.put(url, res);
+              console.warn('[SW] Pre-cache miss:', url, res.status);
+            })
+            .catch((err) => console.warn('[SW] Pre-cache error:', url, err))
         )
-      )
-    ).then(() => self.skipWaiting())
-    .catch(err => {
-      console.error('[SW] Critical asset cache failed:', err);
-      // Vẫn skipWaiting để SW activate dù critical cache lỗi
-      return self.skipWaiting();
-    })
+      );
+    }).then(() => self.skipWaiting())
   );
 });
 
-// Activate: xóa cache cũ (v7 và trước đó)
-self.addEventListener('activate', event => {
-  const allowedCaches = [CACHE_STATIC, CACHE_DYNAMIC];
+// ─── ACTIVATE: xóa cache version cũ ─────────────────────────────────────────
+self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(
+      .then((keys) => Promise.all(
         keys
-          .filter(key => !allowedCaches.includes(key))
-          .map(key => caches.delete(key))
+          .filter((k) => !k.startsWith(CACHE_VERSION))
+          .map((k) => {
+            console.log('[SW] Deleting old cache:', k);
+            return caches.delete(k);
+          })
       ))
       .then(() => self.clients.claim())
   );
 });
 
-// Fetch strategy:
-//   - HTML (index.html): Stale-While-Revalidate → luôn trả cached, update ngầm
-//   - Images/fonts/static: Cache-first
-//   - Khác: Network-first với fallback cache
-self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
+// ─── FETCH ──────────────────────────────────────────────────────────────────
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
 
-  const url = new URL(event.request.url);
+  // Chỉ handle GET
+  if (request.method !== 'GET') return;
 
-  // Chỉ handle same-origin và google fonts
-  if (url.origin !== location.origin && !url.hostname.includes('fonts.g')) return;
+  const url = new URL(request.url);
 
-  const isHTML = event.request.headers.get('accept')?.includes('text/html');
-  const isStatic = /\.(png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|css|js)$/i.test(url.pathname);
+  // Skip cross-origin Firebase/Sentry/analytics
+  if (NEVER_CACHE_PATTERNS.some((pattern) => pattern.test(url.href))) {
+    return; // fall-through, browser xử lý
+  }
 
-  if (isHTML) {
-    // Network-First cho HTML để tránh lỗi cache code cũ (BUG-004)
-    event.respondWith(
-      fetch(event.request).then(response => {
-        if (response.ok) {
-          caches.open(CACHE_STATIC).then(c => c.put(event.request, response.clone()));
+  // Skip non-http(s) (chrome-extension, etc.)
+  if (!url.protocol.startsWith('http')) return;
+
+  // HTML → network-first
+  if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  // Other (JS/CSS/img) → cache-first
+  event.respondWith(cacheFirst(request));
+});
+
+// ─── STRATEGIES ─────────────────────────────────────────────────────────────
+
+async function networkFirst(request) {
+  try {
+    const networkRes = await fetch(request);
+    // Lưu vào runtime cache cho lần offline
+    if (networkRes.ok) {
+      const cache = await caches.open(RUNTIME_CACHE);
+      cache.put(request, networkRes.clone());
+    }
+    return networkRes;
+  } catch (err) {
+    // Network fail → fallback cache
+    const cached = await caches.match(request);
+    if (cached) return cached;
+
+    // Cache miss → offline page (nếu có)
+    const indexCache = await caches.match('./index.html');
+    if (indexCache) return indexCache;
+
+    // Cuối cùng: trả về error response
+    return new Response('Offline. Không có cached version.', {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  }
+}
+
+async function cacheFirst(request) {
+  const cached = await caches.match(request);
+  if (cached) {
+    // Background revalidate (stale-while-revalidate light)
+    fetch(request)
+      .then((res) => {
+        if (res.ok) {
+          caches.open(RUNTIME_CACHE).then((c) => c.put(request, res));
         }
-        return response;
-      }).catch(() => caches.match(event.request).then(c => c || new Response('Offline', { status: 503 })))
-    );
-  } else if (isStatic) {
-    // Cache-first cho static assets
-    event.respondWith(
-      caches.match(event.request).then(cached => {
-        if (cached) return cached;
-        return fetch(event.request).then(response => {
-          if (response.ok) {
-            caches.open(CACHE_STATIC).then(c => c.put(event.request, response.clone()));
-          }
-          return response;
-        }).catch(() => new Response('', { status: 408 }));
       })
-    );
-  } else {
-    // Network-first cho API calls / dynamic content
-    event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          if (response.ok) {
-            caches.open(CACHE_DYNAMIC).then(c => c.put(event.request, response.clone()));
-          }
-          return response;
-        })
-        .catch(() => caches.match(event.request).then(c => c || caches.match('./index.html')))
-    );
+      .catch(() => {});
+    return cached;
+  }
+
+  // Cache miss → fetch + cache
+  try {
+    const networkRes = await fetch(request);
+    if (networkRes.ok) {
+      const cache = await caches.open(RUNTIME_CACHE);
+      cache.put(request, networkRes.clone());
+    }
+    return networkRes;
+  } catch (err) {
+    return new Response('Resource unavailable offline', {
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+  }
+}
+
+// ─── MESSAGE: cho phép app gọi skipWaiting/clearCache ───────────────────────
+self.addEventListener('message', (event) => {
+  if (event.data === 'SKIP_WAITING') {
+    self.skipWaiting();
+  } else if (event.data === 'CLEAR_CACHE') {
+    caches.keys().then((keys) =>
+      Promise.all(keys.map((k) => caches.delete(k)))
+    ).then(() => {
+      event.ports[0]?.postMessage({ cleared: true });
+    });
   }
 });
