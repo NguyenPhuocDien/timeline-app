@@ -30,13 +30,18 @@ test('desktop shell, task flow, and focus flow are healthy', async ({ page }, te
 
   await page.goto('/index.html');
   await page.waitForLoadState('networkidle');
+  
+  // Wait for app initialization by checking if window.openTask function exists
+  await page.waitForFunction(() => {
+    return typeof window.openTask === 'function';
+  }, { timeout: 10000 });
 
   await expect(page.locator('#pageTitle')).toHaveText(/Hôm nay|Dashboard/i);
   await expect(page.locator('#nav')).toBeVisible();
   await expect(page.locator('#openTaskBtn')).toBeVisible();
 
   await page.click('#openTaskBtn');
-  await expect(page.locator('#taskModal')).toHaveClass(/open/);
+  await expect(page.locator('#taskModal')).toHaveClass(/open/, { timeout: 2000 });
 
   const title = `Smoke task ${Date.now()}`;
   await page.fill('#fTitle', title);
@@ -69,13 +74,18 @@ test('mobile layout shows mobile navigation and opens key flows', async ({ page 
 
   await page.goto('/index.html');
   await page.waitForLoadState('networkidle');
+  
+  // Wait for app initialization by checking if window.openTask function exists
+  await page.waitForFunction(() => {
+    return typeof window.openTask === 'function';
+  }, { timeout: 10000 });
 
   await expect(page.locator('#mobileTabs')).toBeVisible();
   await expect(page.locator('#sidebar')).toBeHidden();
   await expect(page.locator('#selectedDate')).toBeVisible();
 
   await page.click('#openTaskBtn');
-  await expect(page.locator('#taskModal')).toHaveClass(/open/);
+  await expect(page.locator('#taskModal')).toHaveClass(/open/, { timeout: 2000 });
   await page.click('#taskModal .btn.secondary');
   await expect(page.locator('#taskModal')).not.toHaveClass(/open/);
 

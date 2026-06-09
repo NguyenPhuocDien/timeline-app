@@ -3,7 +3,15 @@ logs/
 node_modules/
 playwright-report/
 test-results/
+.next/
+apps/web/.next/
+apps/web/.env.local
+apps/web/.vercel
 
-# Phase B backup folders
+# Snapshots and temp files
 .backup-*/
+.broken-*/
+.vscode/
+debug-test.html
+simple-test.html
 

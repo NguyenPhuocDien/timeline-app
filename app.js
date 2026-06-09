@@ -873,6 +873,54 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     function selectCalendarDay(d) { selectedDate = d; $('#selectedDate').value = d; render() }
     function openEvent() { $('#eTitle').value = ''; $('#eDate').value = selectedDate; $('#eType').value = 'solar'; $('#eRecurring').value = 'yes'; $('#eNotes').value = ''; openModal('eventModal') }
     function saveEvent() { const date = $('#eDate').value; if (!date) { toast('Vui lòng chọn ngày cho sự kiện.'); return; } db.events.push({ id: uid(), title: $('#eTitle').value || 'Sự kiện', type: $('#eType').value, date, recurring: $('#eRecurring').value === 'yes', notes: $('#eNotes').value }); save(); closeModal('eventModal'); render() }
+    function eventsUpcoming() {
+      const now = startOfDay(new Date());
+      return db.events
+        .map(eventItem => {
+          let eventDate = parseDate(eventItem.date);
+          if (eventItem.recurring) {
+            eventDate = new Date(now.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+            if (eventDate < now) {
+              eventDate = new Date(now.getFullYear() + 1, eventDate.getMonth(), eventDate.getDate());
+            }
+          }
+          return {
+            ...eventItem,
+            date: fmtDate(eventDate),
+            days: Math.ceil((eventDate - now) / 86400000)
+          };
+        })
+        .filter(eventItem => Number.isFinite(eventItem.days) && eventItem.days >= 0)
+        .sort((a, b) => a.days - b.days)
+        .slice(0, 12);
+    }
+    function nextEvent() { return eventsUpcoming()[0] || null }
+    function addPlanTask(eventId) {
+      const eventItem = db.events.find(x => x.id === eventId);
+      openTask(null, {
+        date: selectedDate,
+        title: 'Chuẩn bị: ' + (eventItem?.title || ''),
+        duration: 60,
+        priority: 'high',
+        eventId
+      });
+    }
+    function calcStreak() {
+      let streak = 0;
+      const cursor = startOfDay(new Date());
+      while (true) {
+        const dateKey = fmtDate(cursor);
+        const hasDoneTask = db.tasks.some(task => task?.date === dateKey && task?.status === 'done');
+        if (!hasDoneTask) break;
+        streak += 1;
+        cursor.setDate(cursor.getDate() - 1);
+      }
+      return streak;
+    }
+    function analyticsDaySnapshot(fd) {
+      const s = stats(fd);
+      const focus = db.sessions.filter(x => x.date === fd).reduce((sum, x) => sum + Number(x.minutes || 0), 0);
+      return {
         date: fd,
         label: fd.slice(5).replace('-', '/'),
         done: Math.round(s.donePct || 0),

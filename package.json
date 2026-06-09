@@ -1,12 +1,16 @@
 {
   "name": "timeline-app",
   "version": "1.0.0",
-  "description": "",
-  "main": "app.js",
+  "private": true,
+  "description": "Timeline Focus Cloud monorepo entrypoint",
   "scripts": {
-    "test": "playwright test",
-    "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "dev": "npm --prefix apps/web run dev",
+    "build": "npm --prefix apps/web run build",
+    "start": "npm --prefix apps/web run start",
+    "lint": "npm --prefix apps/web run lint",
+    "test": "npm --prefix apps/web run build",
+    "test:legacy:e2e": "playwright test",
+    "test:legacy:e2e:headed": "playwright test --headed"
   },
   "repository": {
     "type": "git",
@@ -15,7 +19,6 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/NguyenPhuocDien/timeline-app/issues"
   },
