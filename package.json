@@ -1,16 +1,19 @@
 {
-  "name": "timeline-app",
+  "name": "timeline-focus-workspace",
   "version": "1.0.0",
   "private": true,
-  "description": "Timeline Focus Cloud monorepo entrypoint",
+  "description": "Workspace coordinator for the two Timeline Focus products",
   "scripts": {
-    "dev": "npm --prefix apps/web run dev",
-    "build": "npm --prefix apps/web run build",
-    "start": "npm --prefix apps/web run start",
-    "lint": "npm --prefix apps/web run lint",
-    "test": "npm --prefix apps/web run build",
-    "test:legacy:e2e": "playwright test",
-    "test:legacy:e2e:headed": "playwright test --headed"
+    "dev:legacy": "npm --prefix legacy-pwa run dev",
+    "test:legacy": "npm --prefix legacy-pwa run test:e2e",
+    "test:legacy:headed": "npm --prefix legacy-pwa run test:e2e:headed",
+    "dev:cloud": "npm --prefix cloud-web run dev",
+    "build:cloud": "npm --prefix cloud-web run build",
+    "start:cloud": "npm --prefix cloud-web run start",
+    "lint:cloud": "npm --prefix cloud-web run lint",
+    "test:cloud": "npm run lint:cloud && npm run build:cloud",
+    "test:cloud:smoke": "npm --prefix cloud-web run test:smoke",
+    "test": "npm run test:legacy && npm run test:cloud"
   },
   "repository": {
     "type": "git",
@@ -22,8 +25,5 @@
   "bugs": {
     "url": "https://github.com/NguyenPhuocDien/timeline-app/issues"
   },
-  "homepage": "https://github.com/NguyenPhuocDien/timeline-app#readme",
-  "devDependencies": {
-    "playwright": "^1.60.0"
-  }
+  "homepage": "https://github.com/NguyenPhuocDien/timeline-app#readme"
 }

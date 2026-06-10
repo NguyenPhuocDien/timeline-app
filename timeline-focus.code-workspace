@@ -1,0 +1,21 @@
+{
+  "folders": [
+    {
+      "name": "Timeline Focus - Legacy Firebase PWA",
+      "path": "legacy-pwa"
+    },
+    {
+      "name": "Timeline Focus - Cloud Next Supabase",
+      "path": "cloud-web"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.next": true,
+      "**/.vercel": true,
+      "**/node_modules": true,
+      "**/playwright-report": true,
+      "**/test-results": true
+    }
+  }
+}

@@ -4,9 +4,12 @@ node_modules/
 playwright-report/
 test-results/
 .next/
-apps/web/.next/
-apps/web/.env.local
-apps/web/.vercel
+**/.next/
+**/.vercel/
+**/node_modules/
+**/playwright-report/
+**/test-results/
+cloud-web/.env.local
 
 # Snapshots and temp files
 .backup-*/
@@ -14,4 +17,3 @@ apps/web/.vercel
 .vscode/
 debug-test.html
 simple-test.html
-
