@@ -51,6 +51,14 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       { id: 'aurora-code', name: 'Aurora Code', note: 'Mảng sáng như terminal cực quang.', preview: 'radial-gradient(circle at 18% 18%, #34d399 0%, transparent 28%), radial-gradient(circle at 82% 16%, #60a5fa 0%, transparent 30%), linear-gradient(135deg, #020617 0%, #111827 42%, #172554 100%)', image: 'radial-gradient(circle at 18% 18%, rgba(52,211,153,.9) 0%, transparent 28%), radial-gradient(circle at 82% 16%, rgba(96,165,250,.72) 0%, transparent 30%), radial-gradient(circle at 58% 80%, rgba(168,85,247,.38) 0%, transparent 24%), linear-gradient(135deg, rgba(2,6,23,1) 0%, rgba(17,24,39,1) 42%, rgba(23,37,84,1) 100%)', overlay: 'linear-gradient(180deg, rgba(2,6,23,.38), rgba(2,6,23,.62))', blur: '3px' }
     ];
     const vnDays = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+    // Catalog sự kiện mặc định — id CỐ ĐỊNH để không bị nhân đôi khi merge giữa các thiết bị/nguồn.
+    // PHẢI khai báo trước `let db = load()` vì load() → defaultData() → seedEvents() dùng nó.
+    const SEED_EVENTS = [
+      { id: 'seed-2026-01-01-tet-duong-lich', title: 'Tết Dương lịch', type: 'solar', date: '2026-01-01', recurring: true, notes: '' }, { id: 'seed-2026-02-14-valentine', title: 'Valentine', type: 'solar', date: '2026-02-14', recurring: true, notes: '' }, { id: 'seed-2026-03-08-quoc-te-phu-nu', title: 'Ngày Quốc tế Phụ nữ', type: 'solar', date: '2026-03-08', recurring: true, notes: '' }, { id: 'seed-2026-04-26-gio-to-hung-vuong', title: 'Giỗ Tổ Hùng Vương', type: 'lunar', date: '2026-04-26', recurring: true, notes: '10/3 âm lịch, ngày dương tham khảo theo bảng tra' },
+      { id: 'seed-2026-04-30-giai-phong-mien-nam', title: 'Giải phóng miền Nam', type: 'solar', date: '2026-04-30', recurring: true, notes: '' }, { id: 'seed-2026-05-01-quoc-te-lao-dong', title: 'Quốc tế Lao động', type: 'solar', date: '2026-05-01', recurring: true, notes: '' }, { id: 'seed-2026-09-02-quoc-khanh', title: 'Quốc khánh Việt Nam', type: 'solar', date: '2026-09-02', recurring: true, notes: '' }, { id: 'seed-2026-09-25-tet-trung-thu', title: 'Tết Trung Thu', type: 'lunar', date: '2026-09-25', recurring: true, notes: '15/8 âm lịch, tham khảo' },
+      { id: 'seed-2026-10-20-phu-nu-viet-nam', title: 'Ngày Phụ nữ Việt Nam', type: 'solar', date: '2026-10-20', recurring: true, notes: '' }, { id: 'seed-2026-11-20-nha-giao', title: 'Ngày Nhà giáo Việt Nam', type: 'solar', date: '2026-11-20', recurring: true, notes: '' }, { id: 'seed-2026-12-25-giang-sinh', title: 'Giáng sinh', type: 'solar', date: '2026-12-25', recurring: true, notes: '' }, { id: 'seed-2027-02-01-ong-cong-ong-tao', title: 'Ông Công Ông Táo', type: 'lunar', date: '2027-02-01', recurring: true, notes: '23 tháng Chạp âm lịch, tham khảo' },
+      { id: 'seed-2027-02-06-tet-nguyen-dan', title: 'Tết Nguyên Đán', type: 'lunar', date: '2027-02-06', recurring: true, notes: 'Mùng 1 Tết âm lịch, tham khảo' }
+    ];
     const SETTINGS_DEFAULTS = { theme: 'github-light', accent: 'blue', availableStart: '07:00', availableEnd: '22:00', dailyMissionLimit: 3, notifications: false, backgroundPreset: 'none', backgroundImage: '', backgroundName: '' };
     let currentTab = 'dashboard', selectedDate = fmtDate(new Date()), editingTaskId = null, detailTaskId = null, focusTimer = null, focusRemain = 0, focusTaskId = null, focusStartedAt = null, focusInitialSeconds = 0;
     let undoStack = [], pendingFocusReview = null, analyticsPreviewDate = fmtDate(new Date());
@@ -63,13 +71,36 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       const mergedDb = mergeDbStates(db, remoteDb);
       db = mergedDb;
       normalize();
-      localStorage.setItem(KEY, JSON.stringify(db)); // bypass standard save to avoid echo
+      persistLocal(); // bypass standard save to avoid echo
+      if (window.idbSaveAll) window.idbSaveAll(db);
       const mergedCloudStr = JSON.stringify(cloudComparableDb(mergedDb));
       const remoteCloudStr = JSON.stringify(cloudComparableDb(remoteDb));
       if (window.currentUserId && mergedCloudStr !== remoteCloudStr && window.firebaseSync) {
         window.firebaseSync(mergedDb);
       }
       render();
+    };
+    // Gọi bởi src/core/storage.js sau khi IndexedDB load xong (IDB là nguồn chính trên thiết bị).
+    window.updateDbFromStorage = function(idbData) {
+      const stored = coerceDbShape(idbData);
+      const hadLocalImage = !!db.settings.backgroundImage;
+      const before = JSON.stringify(db);
+      const merged = mergeDbStates(db, stored);
+      // localStorage boot-cache không chứa ảnh nền — khôi phục từ IndexedDB
+      if (!hadLocalImage && stored.settings.backgroundImage) {
+        merged.settings.backgroundImage = stored.settings.backgroundImage;
+        merged.settings.backgroundName = stored.settings.backgroundName || '';
+        merged.settings.backgroundPreset = stored.settings.backgroundPreset || 'upload';
+      }
+      db = merged;
+      normalize();
+      if (window.idbSaveAll) window.idbSaveAll(db);
+      if (JSON.stringify(db) !== before) {
+        persistLocal();
+        applyTheme(db.settings.theme);
+        applyBackground();
+        render();
+      }
     };
     function uid() { return crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()) }
     function pad2(n) { return String(n).padStart(2, '0') }
@@ -182,12 +213,34 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       localItems.forEach(put);
       return [...map.values()];
     }
+    // Dữ liệu cũ chứa seed event với id ngẫu nhiên (uid mỗi lần defaultData chạy) → trùng
+    // lặp khi merge nhiều nguồn. CHỈ dedupe các event khớp catalog seed; event do user tạo
+    // không bao giờ bị gộp. Tombstone (đã xóa) thắng để tôn trọng quyết định xóa của user.
+    const SEED_EVENT_KEYS = new Set(SEED_EVENTS.map(ev => `${ev.title}|${ev.date}|${ev.type}`));
+    function dedupeEvents(events) {
+      const out = [];
+      const seedByKey = new Map();
+      for (const ev of events) {
+        if (!ev || typeof ev !== 'object') continue;
+        const key = `${ev.title}|${ev.date}|${ev.type}`;
+        if (!SEED_EVENT_KEYS.has(key)) { out.push(ev); continue; }
+        const cur = seedByKey.get(key);
+        if (!cur) { seedByKey.set(key, ev); continue; }
+        const curDeleted = isDeletedItem(cur), evDeleted = isDeletedItem(ev);
+        if (evDeleted && !curDeleted) { seedByKey.set(key, ev); continue; }
+        if (curDeleted && !evDeleted) continue;
+        // Cùng trạng thái: ưu tiên bản có createdAt cũ hơn (bản gốc đã sync)
+        const a = cur.createdAt || '', b = ev.createdAt || '';
+        if (b && (!a || b < a)) seedByKey.set(key, ev);
+      }
+      return [...out, ...seedByKey.values()];
+    }
     function mergeDbStates(localSource = {}, remoteSource = {}) {
       const localDb = coerceDbShape(localSource);
       const remoteDb = coerceDbShape(remoteSource);
       const merged = {
         tasks: mergeById(localDb.tasks, remoteDb.tasks),
-        events: mergeById(localDb.events, remoteDb.events),
+        events: dedupeEvents(mergeById(localDb.events, remoteDb.events)),
         sessions: mergeById(localDb.sessions, remoteDb.sessions),
         settings: Object.assign({}, remoteDb.settings, localDb.settings),
         reviews: Object.assign({}, remoteDb.reviews, localDb.reviews)
@@ -206,9 +259,17 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       return copy;
     }
     function load() { try { return Object.assign(defaultData(), JSON.parse(localStorage.getItem(KEY) || '{}')) } catch (e) { return defaultData() } }
+    // localStorage giờ chỉ là boot-cache: khi IndexedDB hoạt động, không lưu ảnh nền base64 vào đây nữa.
+    function persistLocal() {
+      const payload = (window.idbActive && db.settings.backgroundImage)
+        ? { ...db, settings: { ...db.settings, backgroundImage: '' } }
+        : db;
+      localStorage.setItem(KEY, JSON.stringify(payload));
+    }
     function save() {
       try {
-        localStorage.setItem(KEY, JSON.stringify(db));
+        persistLocal();
+        if (window.idbSaveAll) window.idbSaveAll(db);
         if (window.firebaseSync) window.firebaseSync(db);
       } catch (e) {
         // QuotaExceededError — warn user
@@ -227,8 +288,9 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
             freed += db.sessions.length - 500;
             db.sessions = db.sessions.slice(-500);
           }
-          try { localStorage.setItem(KEY, JSON.stringify(db)); }
+          try { persistLocal(); }
           catch (e2) { toast('⚠️ Bộ nhớ đầy! Hãy xuất dữ liệu rồi dọn bớt logs cũ.', { label: 'Xuất dữ liệu', fn: 'exportData()' }); }
+          if (window.idbSaveAll) window.idbSaveAll(db);
           if (freed > 0) toast(`Đã tự dọn ${freed} mục logs cũ để tiết kiệm bộ nhớ.`);
         }
       }
@@ -278,6 +340,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
           db.settings.backgroundPreset = 'upload';
           applyBackground();
           save();
+          if (window.idbFlush) window.idbFlush(); // ảnh chỉ nằm trong IDB — ghi ngay, không chờ debounce
           render();
           toast('Đã cập nhật ảnh nền cá nhân');
         };
@@ -287,13 +350,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       reader.readAsDataURL(file);
       e.target.value = '';
     }
-    function seedEvents() {
-      return [
-        { id: uid(), title: 'Tết Dương lịch', type: 'solar', date: '2026-01-01', recurring: true, notes: '' }, { id: uid(), title: 'Valentine', type: 'solar', date: '2026-02-14', recurring: true, notes: '' }, { id: uid(), title: 'Ngày Quốc tế Phụ nữ', type: 'solar', date: '2026-03-08', recurring: true, notes: '' }, { id: uid(), title: 'Giỗ Tổ Hùng Vương', type: 'lunar', date: '2026-04-26', recurring: true, notes: '10/3 âm lịch, ngày dương tham khảo theo bảng tra' },
-        { id: uid(), title: 'Giải phóng miền Nam', type: 'solar', date: '2026-04-30', recurring: true, notes: '' }, { id: uid(), title: 'Quốc tế Lao động', type: 'solar', date: '2026-05-01', recurring: true, notes: '' }, { id: uid(), title: 'Quốc khánh Việt Nam', type: 'solar', date: '2026-09-02', recurring: true, notes: '' }, { id: uid(), title: 'Tết Trung Thu', type: 'lunar', date: '2026-09-25', recurring: true, notes: '15/8 âm lịch, tham khảo' },
-        { id: uid(), title: 'Ngày Phụ nữ Việt Nam', type: 'solar', date: '2026-10-20', recurring: true, notes: '' }, { id: uid(), title: 'Ngày Nhà giáo Việt Nam', type: 'solar', date: '2026-11-20', recurring: true, notes: '' }, { id: uid(), title: 'Giáng sinh', type: 'solar', date: '2026-12-25', recurring: true, notes: '' }, { id: uid(), title: 'Ông Công Ông Táo', type: 'lunar', date: '2027-02-01', recurring: true, notes: '23 tháng Chạp âm lịch, tham khảo' },
-        { id: uid(), title: 'Tết Nguyên Đán', type: 'lunar', date: '2027-02-06', recurring: true, notes: 'Mùng 1 Tết âm lịch, tham khảo' }]
-    }
+    function seedEvents() { return SEED_EVENTS.map(ev => ({ ...ev })) }
     function normalize() { db.settings = Object.assign({ ...SETTINGS_DEFAULTS }, db.settings || {}); db.settings.theme = normalizeThemeId(db.settings.theme); if (db.settings.backgroundPreset === 'upload' && !db.settings.backgroundImage) db.settings.backgroundPreset = 'none'; if (!Array.isArray(db.tasks)) db.tasks = []; if (!Array.isArray(db.events)) db.events = seedEvents(); if (!Array.isArray(db.sessions)) db.sessions = []; db.tasks.forEach(t => { if (!t.id) t.id = uid(); if (t.done && t.status !== 'done') t.status = 'done'; if (!t.status) t.status = t.done ? 'done' : 'todo'; if (!t.date) t.date = fmtDate(new Date()); if (!t.createdAt) t.createdAt = new Date().toISOString(); if (!t.updatedAt) t.updatedAt = t.createdAt; if (!t.duration) t.duration = 60; if (t.start && !t.end) t.end = deriveEndTime(t.start, t.duration); if (hasWrappedTimeRange(t.start, t.end)) { t.start = ''; t.end = ''; } ensureFlow(t); }); autoStackOld(); }
     function autoStackOld() {
       const today = fmtDate(new Date());
@@ -348,7 +405,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       // Register SW
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker
-          .register('./sw.js?v=10', { updateViaCache: 'none' })
+          .register('./sw.js?v=11', { updateViaCache: 'none' })
           .catch(err => console.warn('[SW]', err));
       }
     }
@@ -1004,9 +1061,11 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         `<button class="btn secondary" onclick="window.firebaseLogout ? window.firebaseLogout() : null">Đăng xuất</button><span class="muted small" style="margin-left: 12px">Đã đồng bộ</span>` :
         `<button class="btn ok" onclick="loginOrSyncHelp()">&#128273; Đăng nhập Đồng bộ</button>`;
 
+      const conflictCount = window._conflictCount || 0;
+      const conflictHtml = conflictCount ? `<div class="small warnText" style="margin:10px 0">⚠️ ${conflictCount} xung đột dữ liệu giữa các thiết bị đã được ghi lại — app giữ bản mới hơn, bản còn lại lưu an toàn tại đây.<div class="row" style="margin-top:8px"><button class="btn sm secondary" onclick="window.exportConflicts()">Tải bản sao xung đột</button><button class="btn sm secondary" onclick="window.clearConflicts()">Xóa nhật ký</button></div></div>` : '';
       $('#settings').innerHTML = `<div class="appearanceGrid">
-        <div class="card syncCard"><div class="syncCardHead"><div><h3>Đồng bộ Đám mây</h3><div class="appearanceNote">Mỗi tài khoản Google là một workspace riêng. Đăng nhập cùng tài khoản trên nhiều thiết bị để cùng dùng một workspace cá nhân.</div></div><span class="metricBadge ${syncInfo.status === 'error' ? 'warn' : syncInfo.status === 'synced' ? 'ok' : ''}">${syncLabels[syncInfo.status] || syncInfo.status}</span></div>${syncInfo.error ? `<div class="small warnText" style="margin:10px 0">${esc(syncInfo.error)}</div>` : ''}<div class="row" style="margin-top:12px">${loginHtml}</div></div>
-        <div class="card"><h3>Appearance</h3><div class="appearanceNote" style="margin-bottom:12px">Bộ giao diện mới ưu tiên cảm giác editor/dashboard: có theme kiểu GitHub, GitLab, VS Code và nền anime-inspired nhưng vẫn giữ focus vào nội dung.</div>${themePickerHTML()}</div><div class="card"><h3>Background</h3><div class="appearanceNote" style="margin-bottom:12px">Bạn có thể dùng nền dựng sẵn hoặc upload ảnh riêng. Ảnh tải lên sẽ được nén trước khi lưu để app vẫn nhẹ.</div>${backgroundPickerHTML()}<div style="margin-top:14px" class="uploadRow"><button class="btn" onclick="uploadBackgroundPrompt()">Tải ảnh nền</button><button class="btn secondary" onclick="clearBackgroundImage()">Xóa ảnh cá nhân</button><span class="fileName">${esc(db.settings.backgroundName || 'Chưa có ảnh nền tùy chỉnh')}</span></div><input id="bgUpload" type="file" accept="image/*" hidden onchange="handleBackgroundUpload(event)"></div><div class="card"><h3>Lịch làm việc</h3><div class="form"><label>Giờ bắt đầu khả dụng<input class="input" type="time" id="setStart" value="${db.settings.availableStart}"></label><label>Giờ kết thúc khả dụng<input class="input" type="time" id="setEnd" value="${db.settings.availableEnd}"></label><label>Giới hạn việc chính hôm nay<input class="input" type="number" id="setMission" value="${db.settings.dailyMissionLimit}"></label><div class="full"><button class="btn" onclick="saveSettings()">Lưu settings</button></div></div></div><div class="card"><h3>Offline app</h3><p>Trạng thái hiện tại: <b>${navigator.onLine ? 'Online' : 'Offline'}</b>. App cache bằng service worker và dữ liệu vẫn lưu trong trình duyệt.</p></div></div>`;
+        <div class="card syncCard"><div class="syncCardHead"><div><h3>Đồng bộ Đám mây</h3><div class="appearanceNote">Mỗi tài khoản Google là một workspace riêng. Đăng nhập cùng tài khoản trên nhiều thiết bị để cùng dùng một workspace cá nhân.</div></div><span class="metricBadge ${syncInfo.status === 'error' ? 'warn' : syncInfo.status === 'synced' ? 'ok' : ''}">${syncLabels[syncInfo.status] || syncInfo.status}</span></div>${syncInfo.error ? `<div class="small warnText" style="margin:10px 0">${esc(syncInfo.error)}</div>` : ''}${conflictHtml}<div class="row" style="margin-top:12px">${loginHtml}</div></div>
+        <div class="card"><h3>Appearance</h3><div class="appearanceNote" style="margin-bottom:12px">Bộ giao diện mới ưu tiên cảm giác editor/dashboard: có theme kiểu GitHub, GitLab, VS Code và nền anime-inspired nhưng vẫn giữ focus vào nội dung.</div>${themePickerHTML()}</div><div class="card"><h3>Background</h3><div class="appearanceNote" style="margin-bottom:12px">Bạn có thể dùng nền dựng sẵn hoặc upload ảnh riêng. Ảnh tải lên sẽ được nén trước khi lưu để app vẫn nhẹ.</div>${backgroundPickerHTML()}<div style="margin-top:14px" class="uploadRow"><button class="btn" onclick="uploadBackgroundPrompt()">Tải ảnh nền</button><button class="btn secondary" onclick="clearBackgroundImage()">Xóa ảnh cá nhân</button><span class="fileName">${esc(db.settings.backgroundName || 'Chưa có ảnh nền tùy chỉnh')}</span></div><input id="bgUpload" type="file" accept="image/*" hidden onchange="handleBackgroundUpload(event)"></div><div class="card"><h3>Lịch làm việc</h3><div class="form"><label>Giờ bắt đầu khả dụng<input class="input" type="time" id="setStart" value="${db.settings.availableStart}"></label><label>Giờ kết thúc khả dụng<input class="input" type="time" id="setEnd" value="${db.settings.availableEnd}"></label><label>Giới hạn việc chính hôm nay<input class="input" type="number" id="setMission" value="${db.settings.dailyMissionLimit}"></label><div class="full"><button class="btn" onclick="saveSettings()">Lưu settings</button></div></div></div><div class="card"><h3>Offline app</h3><p>Trạng thái hiện tại: <b>${navigator.onLine ? 'Online' : 'Offline'}</b>. App cache bằng service worker và dữ liệu vẫn lưu trong trình duyệt.</p><p class="small muted">Bộ nhớ dữ liệu: <b>${window.idbActive ? 'IndexedDB (ổn định, dung lượng lớn)' : 'localStorage (chế độ dự phòng)'}</b></p></div></div>`;
     }
     function saveSettings() { const start = $('#setStart').value; const end = $('#setEnd').value; const missionLimit = Number($('#setMission').value) || 3; if (start && end && minOf(end) <= minOf(start)) { toast('Giờ kết thúc phải lớn hơn giờ bắt đầu.'); return; } db.settings.availableStart = start; db.settings.availableEnd = end; db.settings.dailyMissionLimit = missionLimit; save(); render(); toast('Đã lưu settings') }
     function openModal(id) {

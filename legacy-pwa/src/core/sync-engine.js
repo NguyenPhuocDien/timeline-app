@@ -280,6 +280,9 @@ function subscribeToCollections(uid) {
     };
     latestRemoteDb = coerceDbShape(remoteDb);
 
+    // Phát hiện xung đột (cùng 1 mục bị sửa trên 2 thiết bị) TRƯỚC khi merge ghi đè
+    try { detectConflicts(latestRemoteDb); } catch (err) { console.warn('[sync] conflict detection failed:', err); }
+
     // Gọi app.js merge logic (mergeDbStates đã có sẵn ở app.js)
     if (typeof window.updateDbFromFirebase === 'function') {
       try {
@@ -352,6 +355,57 @@ function subscribeToCollections(uid) {
     if (initialLoadsRemaining > 0) onInitialLoad();
     else mergeAndApply();
   }, (err) => handleSyncError('reviews', err)));
+}
+
+/**
+ * Phát hiện xung đột giữa local và remote so với baseline lần sync trước.
+ * Một mục bị coi là xung đột khi CẢ local và remote đều đã đổi updatedAt so với
+ * baseline, và khác nhau. Merge của app.js vẫn giữ bản mới hơn (LWW) — nhưng bản
+ * thua được lưu vào IndexedDB (window.idbLogConflict) thay vì mất im lặng.
+ */
+function detectConflicts(remoteDb) {
+  if (!initialSyncDone || !lastSyncedLocalDb) return;
+  const localDb = getLocalDbSnapshot();
+  if (!localDb) return;
+
+  const conflicts = [];
+  for (const scope of ['tasks', 'events', 'sessions']) {
+    const baseMap = new Map((lastSyncedLocalDb[scope] || []).filter(e => e?.id != null).map(e => [String(e.id), e]));
+    const localMap = new Map((localDb[scope] || []).filter(e => e?.id != null).map(e => [String(e.id), e]));
+    for (const remote of remoteDb[scope] || []) {
+      if (remote?.id == null) continue;
+      const id = String(remote.id);
+      const base = baseMap.get(id);
+      const local = localMap.get(id);
+      if (!base || !local) continue;
+      const baseStamp = String(base.updatedAt || '');
+      const localStamp = String(local.updatedAt || '');
+      const remoteStamp = String(remote.updatedAt || '');
+      const localChanged = localStamp !== baseStamp;
+      const remoteChanged = remoteStamp !== baseStamp;
+      // Yêu cầu nội dung thực sự khác nhau — tránh false positive khi 2 thiết bị cùng
+      // auto-stack một task qua ngày (chỉ lệch updatedAt, nội dung giống hệt).
+      if (localChanged && remoteChanged && localStamp !== remoteStamp
+          && !deepEqual(stripSyncMeta(local), stripSyncMeta(remote))) {
+        conflicts.push({
+          scope,
+          id,
+          title: remote.title || local.title || id,
+          kept: remoteStamp > localStamp ? 'remote' : 'local',
+          localCopy: local,
+          remoteCopy: remote,
+        });
+      }
+    }
+  }
+
+  if (conflicts.length) {
+    if (typeof window.idbLogConflict === 'function') {
+      conflicts.forEach((c) => window.idbLogConflict(c));
+    }
+    console.warn('[sync] Conflicts detected:', conflicts.map(c => `${c.scope}/${c.id}`));
+    showToast(`⚠️ ${conflicts.length} mục được sửa trên 2 thiết bị cùng lúc — đã giữ bản mới hơn, bản còn lại lưu trong Cài đặt.`);
+  }
 }
 
 function handleSyncError(scope, err) {

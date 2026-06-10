@@ -201,12 +201,24 @@ export function sanitizeSessionForFirestore(session) {
 /** @param {Settings} settings */
 export function sanitizeSettingsForFirestore(settings) {
   if (!settings || typeof settings !== 'object') return {};
-  const out = { ...settings };
+  // Whitelist field — khớp với validator trong firestore.rules
+  const out = {};
+  if (settings.theme != null) out.theme = String(settings.theme).slice(0, 50);
+  if (settings.accent != null) out.accent = String(settings.accent).slice(0, 50);
+  if (settings.availableStart != null) out.availableStart = String(settings.availableStart).slice(0, 8);
+  if (settings.availableEnd != null) out.availableEnd = String(settings.availableEnd).slice(0, 8);
+  if (settings.dailyMissionLimit != null) {
+    const n = Math.round(Number(settings.dailyMissionLimit));
+    out.dailyMissionLimit = Number.isFinite(n) ? Math.max(0, Math.min(20, n)) : 3;
+  }
+  if (settings.notifications != null) out.notifications = !!settings.notifications;
   // Background image base64 có thể MB → KHÔNG sync (đã đúng theo app.js cloudComparableDb)
-  delete out.backgroundImage;
-  delete out.backgroundName;
-  // Giữ backgroundPreset = 'none' nếu là 'upload' (vì upload phụ thuộc backgroundImage local-only)
-  if (out.backgroundPreset === 'upload') out.backgroundPreset = 'none';
+  // backgroundPreset = 'none' nếu là 'upload' (vì upload phụ thuộc backgroundImage local-only)
+  if (settings.backgroundPreset != null) {
+    out.backgroundPreset = settings.backgroundPreset === 'upload' ? 'none' : String(settings.backgroundPreset).slice(0, 50);
+  }
+  if (settings.updatedAt != null) out.updatedAt = String(settings.updatedAt).slice(0, 30);
+  if (settings.migratedFrom != null) out.migratedFrom = settings.migratedFrom;
   return out;
 }
 

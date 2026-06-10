@@ -1,5 +1,5 @@
 /**
- * Timeline Focus — Service Worker v10
+ * Timeline Focus — Service Worker v11
  *
  * Strategy:
  *   - HTML: network-first (luôn lấy bản mới, fallback cache khi offline)
@@ -7,15 +7,17 @@
  *   - Firebase API: KHÔNG cache (Firebase SDK có IndexedDB persistence riêng)
  *   - Sentry: KHÔNG cache
  *
+ * v11: thêm storage engine (IndexedDB/Dexie) + module sync vào precache
+ *
  * Tăng CACHE_VERSION khi:
  *   - Đổi cấu trúc cache (thêm/bớt resource)
  *   - Cần force invalidate cache cũ
  *
- * App.js register: navigator.serviceWorker.register('./sw.js?v=10', { updateViaCache: 'none' })
+ * App.js register: navigator.serviceWorker.register('./sw.js?v=11', { updateViaCache: 'none' })
  * → updateViaCache: 'none' đảm bảo SW file luôn fetch từ network (không cache SW)
  */
 
-const CACHE_VERSION = 'tlf-v10';
+const CACHE_VERSION = 'tlf-v11';
 const CACHE_NAME = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -26,6 +28,12 @@ const PRECACHE_URLS = [
   './app.js',
   './style.css',
   './manifest.webmanifest',
+  './vendor/dexie.min.js',
+  './src/core/storage.js',
+  './src/core/schema.js',
+  './src/core/migration.js',
+  './src/core/sync-engine.js',
+  './src/ui/sync-indicator.js',
 ];
 
 // Domains/paths KHÔNG bao giờ cache (xử lý riêng Firebase, Sentry, analytics)

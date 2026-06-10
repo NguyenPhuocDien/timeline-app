@@ -60,11 +60,7 @@ service cloud.firestore {
         allow read: if isOwner(userId);
         allow write: if isOwner(userId)
           && settingsId == 'main'
-          && request.resource.data.size() <= 50
-          // KHÔNG cho phép ghi base64 image (chống vỡ 1MB)
-          && (!('backgroundImage' in request.resource.data)
-              || request.resource.data.backgroundImage == ''
-              || request.resource.data.backgroundImage == null);
+          && isValidSettings(request.resource.data);
         allow delete: if false;
       }
 
@@ -73,7 +69,7 @@ service cloud.firestore {
         allow read: if isOwner(userId);
         allow write: if isOwner(userId)
           && reviewsId == 'main'
-          && request.resource.data.size() <= 10;  // chỉ có { data, updatedAt, migratedFrom }
+          && isValidReviews(request.resource.data);
         allow delete: if false;
       }
 
@@ -180,6 +176,39 @@ service cloud.firestore {
         && isOptionalString(data.get('createdAt', null), 30)
         && isOptionalString(data.get('updatedAt', null), 30)
         && isOptionalString(data.get('deletedAt', null), 30);
+    }
+
+    function isValidSettings(data) {
+      return data.keys().hasOnly([
+          'theme', 'accent', 'availableStart', 'availableEnd',
+          'dailyMissionLimit', 'notifications',
+          'backgroundPreset', 'backgroundName', 'backgroundImage',
+          'createdAt', 'updatedAt', 'migratedFrom'
+        ])
+        && isOptionalString(data.get('theme', null), 50)
+        && isOptionalString(data.get('accent', null), 50)
+        && isOptionalString(data.get('availableStart', null), 8)
+        && isOptionalString(data.get('availableEnd', null), 8)
+        && (data.get('dailyMissionLimit', 0) is number
+            && data.get('dailyMissionLimit', 0) >= 0
+            && data.get('dailyMissionLimit', 0) <= 100)
+        && (data.get('notifications', false) is bool)
+        && isOptionalString(data.get('backgroundPreset', null), 50)
+        && isOptionalString(data.get('backgroundName', null), 200)
+        // KHÔNG cho phép ghi base64 image (chống vỡ 1MB)
+        && (!('backgroundImage' in data)
+            || data.backgroundImage == ''
+            || data.backgroundImage == null)
+        && isOptionalString(data.get('createdAt', null), 30)
+        && isOptionalString(data.get('updatedAt', null), 30);
+    }
+
+    function isValidReviews(data) {
+      // createdAt: commitBatched của sync-engine tự thêm khi thiếu, và doc cũ đã có sẵn
+      return data.keys().hasOnly(['data', 'updatedAt', 'createdAt', 'migratedFrom'])
+        && (data.get('data', {}) is map)
+        && isOptionalString(data.get('updatedAt', null), 30)
+        && isOptionalString(data.get('createdAt', null), 30);
     }
 
     function isValidSession(data) {

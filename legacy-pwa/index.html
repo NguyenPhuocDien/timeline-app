@@ -214,7 +214,8 @@
   <div class="toast" id="toast"></div>
   <script src="app.js"></script>
 
-  <!-- Firebase Auth, Firestore sync, and sync status UI -->
+  <!-- Local storage engine (IndexedDB/Dexie), Firebase Auth, Firestore sync, and sync status UI -->
+  <script type="module" src="src/core/storage.js"></script>
   <script type="module" src="src/core/sync-engine.js"></script>
   <script type="module" src="src/ui/sync-indicator.js"></script>
 </body>
