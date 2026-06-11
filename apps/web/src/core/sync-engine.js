@@ -51,9 +51,20 @@ import { runMigrationIfNeeded } from './migration.js';
 // ════════════════════════════════════════════════════════════════════════════
 // DEFAULT CONFIG (match config gốc trong index.html cũ)
 // ════════════════════════════════════════════════════════════════════════════
+// Các host được Firebase Hosting phục vụ /__/auth/* NATIVE và đã/sẽ đăng ký
+// redirect URI trong Google OAuth client → dùng chính host đó làm authDomain
+// để toàn bộ flow đăng nhập same-origin (không phụ thuộc cookie bên thứ ba).
+// Host khác (Vercel, localhost) fallback về firebaseapp.com (cross-origin).
+const SAME_ORIGIN_AUTH_HOSTS = [
+  'timeline-app-9a872.firebaseapp.com',
+  'timelinefocus.web.app',
+];
+
 const DEFAULT_CONFIG = {
   apiKey: 'AIzaSyBaSHqy3Vo7tYmsimmTMz7BJARPxtFmwdI',
-  authDomain: 'timeline-app-9a872.firebaseapp.com',
+  authDomain: SAME_ORIGIN_AUTH_HOSTS.includes(location.hostname)
+    ? location.hostname
+    : 'timeline-app-9a872.firebaseapp.com',
   projectId: 'timeline-app-9a872',
   storageBucket: 'timeline-app-9a872.firebasestorage.app',
   messagingSenderId: '217681480315',

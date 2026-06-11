@@ -1,5 +1,5 @@
 /**
- * Timeline Focus — Service Worker v14
+ * Timeline Focus — Service Worker v15
  *
  * Strategy:
  *   - HTML: network-first (luôn lấy bản mới, fallback cache khi offline)
@@ -8,17 +8,17 @@
  *   - Firebase API: KHÔNG cache (Firebase SDK có IndexedDB persistence riêng)
  *   - Sentry: KHÔNG cache
  *
- * v14: SW chỉ intercept same-origin (fix Google login bị hỏng do SW trả HTML cho apis.google.com)
+ * v15: authDomain động theo host (same-origin login trên firebaseapp.com + timelinefocus.web.app)
  *
  * Tăng CACHE_VERSION khi:
  *   - Đổi cấu trúc cache (thêm/bớt resource)
  *   - Cần force invalidate cache cũ
  *
- * App.js register: navigator.serviceWorker.register('./sw.js?v=14', { updateViaCache: 'none' })
+ * App.js register: navigator.serviceWorker.register('./sw.js?v=15', { updateViaCache: 'none' })
  * → updateViaCache: 'none' đảm bảo SW file luôn fetch từ network (không cache SW)
  */
 
-const CACHE_VERSION = 'tlf-v14';
+const CACHE_VERSION = 'tlf-v15';
 const CACHE_NAME = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -26,15 +26,15 @@ const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const PRECACHE_URLS = [
   './',
   './index.html',
-  './app.js?v=14',
+  './app.js?v=15',
   './style.css',
   './manifest.webmanifest',
   './vendor/dexie.min.js',
-  './src/core/storage.js?v=14',
+  './src/core/storage.js?v=15',
   './src/core/schema.js',
   './src/core/migration.js',
-  './src/core/sync-engine.js?v=14',
-  './src/ui/sync-indicator.js?v=14',
+  './src/core/sync-engine.js?v=15',
+  './src/ui/sync-indicator.js?v=15',
 ];
 
 // ─── INSTALL ────────────────────────────────────────────────────────────────
