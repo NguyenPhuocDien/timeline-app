@@ -20,8 +20,8 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {
   getAuth,
-  signInWithPopup,
   signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
@@ -121,6 +121,12 @@ export function initSyncEngine(config = DEFAULT_CONFIG) {
     window.auth = auth;
 
     onAuthStateChanged(auth, handleAuthStateChange);
+    getRedirectResult(auth).catch((err) => {
+      console.error('[sync] Redirect sign-in failed:', err);
+      setSyncStatus('error', `Login failed: ${err?.message || err}`);
+      showToast('Đăng nhập thất bại: ' + (err?.message || err));
+      if (window.Sentry) window.Sentry.captureException(err);
+    });
     setSyncStatus(isOnline ? 'signed-out' : 'offline');
   } catch (err) {
     console.error('[sync] Firebase init failed:', err);
@@ -138,10 +144,12 @@ window.firebaseLogin = async () => {
     return;
   }
   const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
   try {
     const btn = document.getElementById('loginBtn');
     if (btn) btn.innerHTML = '⏳ Đang xử lý...';
-    await signInWithPopup(auth, provider);
+    showToast('Đang chuyển sang Google để đăng nhập...');
+    await signInWithRedirect(auth, provider);
   } catch (err) {
     if ([
       'auth/popup-blocked',

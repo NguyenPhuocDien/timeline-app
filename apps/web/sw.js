@@ -1,23 +1,24 @@
 /**
- * Timeline Focus — Service Worker v11
+ * Timeline Focus — Service Worker v12
  *
  * Strategy:
  *   - HTML: network-first (luôn lấy bản mới, fallback cache khi offline)
- *   - JS/CSS/img: cache-first với revalidate background
+ *   - JS/CSS: network-first, fallback cache khi offline
+ *   - img/font/etc: cache-first với revalidate background
  *   - Firebase API: KHÔNG cache (Firebase SDK có IndexedDB persistence riêng)
  *   - Sentry: KHÔNG cache
  *
- * v11: thêm storage engine (IndexedDB/Dexie) + module sync vào precache
+ * v12: bust cache cho login/sync modules và ưu tiên network cho JS/CSS
  *
  * Tăng CACHE_VERSION khi:
  *   - Đổi cấu trúc cache (thêm/bớt resource)
  *   - Cần force invalidate cache cũ
  *
- * App.js register: navigator.serviceWorker.register('./sw.js?v=11', { updateViaCache: 'none' })
+ * App.js register: navigator.serviceWorker.register('./sw.js?v=12', { updateViaCache: 'none' })
  * → updateViaCache: 'none' đảm bảo SW file luôn fetch từ network (không cache SW)
  */
 
-const CACHE_VERSION = 'tlf-v11';
+const CACHE_VERSION = 'tlf-v12';
 const CACHE_NAME = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -25,15 +26,15 @@ const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const PRECACHE_URLS = [
   './',
   './index.html',
-  './app.js',
+  './app.js?v=12',
   './style.css',
   './manifest.webmanifest',
   './vendor/dexie.min.js',
-  './src/core/storage.js',
+  './src/core/storage.js?v=12',
   './src/core/schema.js',
   './src/core/migration.js',
-  './src/core/sync-engine.js',
-  './src/ui/sync-indicator.js',
+  './src/core/sync-engine.js?v=12',
+  './src/ui/sync-indicator.js?v=12',
 ];
 
 // Domains/paths KHÔNG bao giờ cache (xử lý riêng Firebase, Sentry, analytics)
@@ -108,7 +109,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Other (JS/CSS/img) → cache-first
+  // JS/CSS must update promptly after deploy; cache remains offline fallback.
+  if (request.destination === 'script' || request.destination === 'style') {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+  // Other assets → cache-first
   event.respondWith(cacheFirst(request));
 });
 
