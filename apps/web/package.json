@@ -1,0 +1,15 @@
+{
+  "name": "@timeline/web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Timeline Focus static Firebase PWA",
+  "scripts": {
+    "build": "node -e \"const fs=require('fs'); ['index.html','app.js','style.css','manifest.webmanifest','sw.js'].forEach(f=>{if(!fs.existsSync(f)){throw new Error('Missing static asset: '+f)}}); console.log('Static web assets verified')\"",
+    "dev": "python -m http.server 4173 --bind 127.0.0.1",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

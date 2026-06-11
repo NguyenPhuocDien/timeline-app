@@ -1,0 +1,10 @@
+snapshots/
+test-results/
+playwright-report/
+.vercel/
+node_modules/
+tests/
+*.md
+debug-test.html
+simple-test.html
+firebase-debug.log

@@ -1,29 +1,31 @@
-# Timeline Focus Workspace
+# Timeline App
 
-This repository contains two independent products:
+Timeline Focus is organized as a lightweight monorepo.
 
 | Project | Stack | Purpose |
 | --- | --- | --- |
-| `legacy-pwa` | Static HTML/CSS/JS, Firebase | Existing PWA interface and Firebase synchronization |
-| `cloud-web` | Next.js, React, Supabase | New workspace-based product |
+| `apps/web` | Static HTML/CSS/JS, Firebase | Existing PWA interface and Firebase synchronization |
+| `docs/archive` | Markdown | Historical audit, rollout, and deployment notes |
+| `tests/e2e` | Playwright | End-to-end tests for the web app |
+| `packages` | Workspace packages | Future shared code |
 
-Open `timeline-focus.code-workspace` in VS Code to see both products as
-separate workspace roots.
+Open `timeline-focus.code-workspace` in VS Code to see the monorepo and web app roots.
 
 ## Commands
 
 ```bash
-npm run dev:legacy
-npm run test:legacy
-npm run dev:cloud
-npm run test:cloud
+npm install
+npm run dev
+npm run test:e2e
 ```
 
-Each folder also has its own `package.json`, README, deployment configuration,
-dependencies, and project documentation.
+## Structure
 
-## Deployment isolation
+```text
+apps/web          Deployable Firebase PWA
+docs/archive      Project documentation migrated from the old app folder
+packages          Shared packages when extraction becomes useful
+tests/e2e         Playwright e2e tests
+```
 
-- `legacy-pwa` keeps the existing Vercel link for the legacy production site.
-- `cloud-web` must be linked to a different Vercel project before deployment.
-- Never link both folders to the same Vercel project or production domain.
+See `docs/PROJECT_STRUCTURE.md` for the architecture rationale and references.

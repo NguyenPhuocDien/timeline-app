@@ -1,12 +1,12 @@
 {
   "folders": [
     {
-      "name": "Timeline Focus - Legacy Firebase PWA",
-      "path": "legacy-pwa"
+      "name": "Timeline App Monorepo",
+      "path": "."
     },
     {
-      "name": "Timeline Focus - Cloud Next Supabase",
-      "path": "cloud-web"
+      "name": "Timeline Focus Web",
+      "path": "apps/web"
     }
   ],
   "settings": {

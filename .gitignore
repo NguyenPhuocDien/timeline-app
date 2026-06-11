@@ -9,11 +9,18 @@ test-results/
 **/node_modules/
 **/playwright-report/
 **/test-results/
-cloud-web/.env.local
+**/snapshots/
+apps/web/.env.local
 
 # Snapshots and temp files
 .backup-*/
 .broken-*/
+**/.backup-*/
+**/.broken-*/
 .vscode/
 debug-test.html
 simple-test.html
+**/debug-test.html
+**/simple-test.html
+
+.vercel

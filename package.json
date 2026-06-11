@@ -1,19 +1,24 @@
 {
-  "name": "timeline-focus-workspace",
+  "name": "timeline-app",
   "version": "1.0.0",
   "private": true,
-  "description": "Workspace coordinator for the two Timeline Focus products",
+  "description": "Timeline Focus monorepo",
+  "packageManager": "npm@11.13.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev:legacy": "npm --prefix legacy-pwa run dev",
-    "test:legacy": "npm --prefix legacy-pwa run test:e2e",
-    "test:legacy:headed": "npm --prefix legacy-pwa run test:e2e:headed",
-    "dev:cloud": "npm --prefix cloud-web run dev",
-    "build:cloud": "npm --prefix cloud-web run build",
-    "start:cloud": "npm --prefix cloud-web run start",
-    "lint:cloud": "npm --prefix cloud-web run lint",
-    "test:cloud": "npm run lint:cloud && npm run build:cloud",
-    "test:cloud:smoke": "npm --prefix cloud-web run test:smoke",
-    "test": "npm run test:legacy && npm run test:cloud"
+    "dev": "npm run dev --workspace @timeline/web",
+    "dev:web": "npm run dev --workspace @timeline/web",
+    "build": "npm run build --workspace @timeline/web",
+    "test": "npm run test:e2e --workspace @timeline/web",
+    "test:e2e": "npm run test:e2e --workspace @timeline/web",
+    "test:e2e:headed": "npm run test:e2e:headed --workspace @timeline/web",
+    "turbo": "turbo"
+  },
+  "devDependencies": {
+    "turbo": "^2.8.0"
   },
   "repository": {
     "type": "git",
