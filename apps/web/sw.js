@@ -1,5 +1,5 @@
 /**
- * Timeline Focus — Service Worker v13
+ * Timeline Focus — Service Worker v14
  *
  * Strategy:
  *   - HTML: network-first (luôn lấy bản mới, fallback cache khi offline)
@@ -8,17 +8,17 @@
  *   - Firebase API: KHÔNG cache (Firebase SDK có IndexedDB persistence riêng)
  *   - Sentry: KHÔNG cache
  *
- * v13: popup-first Google login rollout, force refresh core JS modules
+ * v14: SW chỉ intercept same-origin (fix Google login bị hỏng do SW trả HTML cho apis.google.com)
  *
  * Tăng CACHE_VERSION khi:
  *   - Đổi cấu trúc cache (thêm/bớt resource)
  *   - Cần force invalidate cache cũ
  *
- * App.js register: navigator.serviceWorker.register('./sw.js?v=13', { updateViaCache: 'none' })
+ * App.js register: navigator.serviceWorker.register('./sw.js?v=14', { updateViaCache: 'none' })
  * → updateViaCache: 'none' đảm bảo SW file luôn fetch từ network (không cache SW)
  */
 
-const CACHE_VERSION = 'tlf-v13';
+const CACHE_VERSION = 'tlf-v14';
 const CACHE_NAME = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -26,28 +26,15 @@ const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const PRECACHE_URLS = [
   './',
   './index.html',
-  './app.js?v=13',
+  './app.js?v=14',
   './style.css',
   './manifest.webmanifest',
   './vendor/dexie.min.js',
-  './src/core/storage.js?v=13',
+  './src/core/storage.js?v=14',
   './src/core/schema.js',
   './src/core/migration.js',
-  './src/core/sync-engine.js?v=13',
-  './src/ui/sync-indicator.js?v=13',
-];
-
-// Domains/paths KHÔNG bao giờ cache (xử lý riêng Firebase, Sentry, analytics)
-const NEVER_CACHE_PATTERNS = [
-  /firebaseio\.com/,
-  /googleapis\.com/,
-  /firebase\.com/,
-  /firebaseapp\.com/,
-  /gstatic\.com\/firebasejs/,  // Firebase SDK - tự revalidate
-  /sentry\.io/,
-  /ingest\.sentry\.io/,
-  /plausible\.io/,
-  /umami/,
+  './src/core/sync-engine.js?v=14',
+  './src/ui/sync-indicator.js?v=14',
 ];
 
 // ─── INSTALL ────────────────────────────────────────────────────────────────
@@ -95,13 +82,16 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // Skip cross-origin Firebase/Sentry/analytics
-  if (NEVER_CACHE_PATTERNS.some((pattern) => pattern.test(url.href))) {
-    return; // fall-through, browser xử lý
-  }
+  // CHỈ xử lý request cùng origin. Mọi request cross-origin (Firebase, gapi,
+  // accounts.google.com, Sentry, CDN...) để browser tự xử lý — SW intercept
+  // script bên thứ ba từng làm hỏng Google login (apis.google.com nhận về HTML).
+  if (url.origin !== self.location.origin) return;
 
   // Skip non-http(s) (chrome-extension, etc.)
   if (!url.protocol.startsWith('http')) return;
+
+  // Không đụng vào đường auth helper (/__/auth/*, /__/firebase/*) — proxy về Firebase
+  if (url.pathname.startsWith('/__/')) return;
 
   // HTML → network-first
   if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
@@ -134,9 +124,12 @@ async function networkFirst(request) {
     const cached = await caches.match(request);
     if (cached) return cached;
 
-    // Cache miss → offline page (nếu có)
-    const indexCache = await caches.match('./index.html');
-    if (indexCache) return indexCache;
+    // Cache miss → offline page CHỈ cho navigation (trả HTML cho script/style
+    // sẽ gây lỗi MIME 'text/html is not executable' với nosniff)
+    if (request.mode === 'navigate') {
+      const indexCache = await caches.match('./index.html');
+      if (indexCache) return indexCache;
+    }
 
     // Cuối cùng: trả về error response
     return new Response('Offline. Không có cached version.', {

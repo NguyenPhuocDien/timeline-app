@@ -60,7 +60,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       { id: 'seed-2027-02-06-tet-nguyen-dan', title: 'Tết Nguyên Đán', type: 'lunar', date: '2027-02-06', recurring: true, notes: 'Mùng 1 Tết âm lịch, tham khảo' }
     ];
     const SETTINGS_DEFAULTS = { theme: 'github-light', accent: 'blue', availableStart: '07:00', availableEnd: '22:00', dailyMissionLimit: 3, notifications: false, backgroundPreset: 'none', backgroundImage: '', backgroundName: '' };
-    let currentTab = 'dashboard', selectedDate = fmtDate(new Date()), editingTaskId = null, detailTaskId = null, focusTimer = null, focusRemain = 0, focusTaskId = null, focusStartedAt = null, focusInitialSeconds = 0;
+    let currentTab = 'dashboard', selectedDate = fmtDate(new Date()), editingTaskId = null, detailTaskId = null, focusTimer = null, focusRemain = 0, focusTaskId = null, focusStartedAt = null, focusInitialSeconds = 0, focusEndAt = null;
     let undoStack = [], pendingFocusReview = null, analyticsPreviewDate = fmtDate(new Date());
     let taskFilters = { q: '', status: 'all', priority: 'all', tag: 'all', special: 'all' };
     let db = load();
@@ -115,7 +115,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     function hasWrappedTimeRange(start, end) { const s = minOf(start), e = minOf(end); return s !== null && e !== null && e <= s }
     function clamp(n, a, b) { return Math.max(a, Math.min(b, n)) }
     function pct(n) { return clamp(Math.round(n), 0, 100) }
-    function esc(s) { return String(s ?? '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m])) }
+    function esc(s) { return String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])) }
     function toast(msg, action = null) { const t = $('#toast'); t.textContent = msg; if (action) { const b = document.createElement('button'); b.textContent = action.label; b.onclick = () => { if (typeof action.fn === 'function') action.fn(); else if (typeof action.fn === 'string' && window[action.fn.replace('()','')]) window[action.fn.replace('()','')](); }; t.appendChild(document.createTextNode(' ')); t.appendChild(b); } t.classList.add('show'); clearTimeout(toast._timer); toast._timer = setTimeout(() => t.classList.remove('show'), action ? 5200 : 2200) }
     function cloneDb() { return JSON.parse(JSON.stringify(db)) }
     function getDbSnapshot() { return cloneDb() }
@@ -130,15 +130,18 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       toast(`Đồng bộ Firebase chưa sẵn sàng. Hãy kiểm tra mạng rồi thử lại.${error}`);
     }
     function pushUndo(label) { undoStack.push({ label, db: cloneDb(), selectedDate }); if (undoStack.length > 20) undoStack.shift(); }
-    function undoLast() { const item = undoStack.pop(); if (!item) return; db = item.db; selectedDate = item.selectedDate || selectedDate; normalize(); render(); toast(`Đã hoàn tác: ${item.label}`) }
+    function undoLast() { const item = undoStack.pop(); if (!item) return; db = item.db; selectedDate = item.selectedDate || selectedDate; normalize(); save(); render(); toast(`Đã hoàn tác: ${item.label}`) }
     function toastUndo(msg) { toast(msg, { label: 'Hoàn tác', fn: 'undoLast()' }) }
     function getHourHeight() { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--h')) || 64 }
     function touchTask(t, extra = {}) { if (!t) return t; Object.assign(t, extra, { updatedAt: new Date().toISOString() }); return t }
+    // Stamp settings mỗi khi user chủ động đổi — dùng cho merge LWW giữa các thiết bị
+    function touchSettings() { db.settings.updatedAt = new Date().toISOString() }
     function defaultFlow() { return { summary: '', checklist: [], notes: [], blockers: [], nextActions: [], logs: [] } }
     function ensureFlow(t) {
       t.flow = Object.assign(defaultFlow(), t.flow || {});
-      t.flow.checklist = (t.flow.checklist || []).map(x => typeof x === 'string' ? { id: uid(), text: x, done: false } : Object.assign({ id: uid(), text: '', done: false }, x));
-      ['notes', 'blockers', 'nextActions', 'logs'].forEach(k => t.flow[k] = (t.flow[k] || []).map(x => typeof x === 'string' ? { id: uid(), text: x, createdAt: new Date().toISOString() } : Object.assign({ id: uid(), text: '', createdAt: new Date().toISOString() }, x)));
+      t.flow.checklist = (t.flow.checklist || []).map(x => typeof x === 'string' ? { id: uid(), text: x, done: false } : Object.assign({ id: uid(), text: '', done: false }, x, { id: safeId(x?.id), text: safeStr(x?.text), done: !!x?.done }));
+      ['notes', 'blockers', 'nextActions', 'logs'].forEach(k => t.flow[k] = (t.flow[k] || []).map(x => typeof x === 'string' ? { id: uid(), text: x, createdAt: new Date().toISOString() } : Object.assign({ id: uid(), text: '', createdAt: new Date().toISOString() }, x, { id: safeId(x?.id), text: safeStr(x?.text) })));
+      t.flow.summary = safeStr(t.flow.summary);
       return t.flow;
     }
     function normalizeThemeId(id) { if (id === 'light') return 'github-light'; if (id === 'dark') return 'vscode-dark'; return THEMES.some(t => t.id === id) ? id : 'github-light' }
@@ -147,12 +150,12 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       const themeId = normalizeThemeId(id);
       db.settings.theme = themeId;
       document.documentElement.dataset.theme = themeId;
-      const meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.content = activeTheme().meta;
+      // index.html có 2 meta theme-color (media light/dark) — cập nhật cả hai
+      document.querySelectorAll('meta[name="theme-color"]').forEach(m => { m.content = activeTheme().meta; });
       const btn = $('#themeBtn');
       if (btn) btn.textContent = `Giao diện: ${activeTheme().name}`;
     }
-    function setTheme(id) { applyTheme(id); save(); render(); toast(`Đã đổi sang ${activeTheme().name}`) }
+    function setTheme(id) { applyTheme(id); touchSettings(); save(); render(); toast(`Đã đổi sang ${activeTheme().name}`) }
     function cycleTheme() {
       const current = normalizeThemeId(db.settings.theme);
       const i = THEMES.findIndex(t => t.id === current);
@@ -238,11 +241,16 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     function mergeDbStates(localSource = {}, remoteSource = {}) {
       const localDb = coerceDbShape(localSource);
       const remoteDb = coerceDbShape(remoteSource);
+      // Settings: bên có updatedAt mới hơn thắng (LWW). Trước đây local luôn thắng
+      // → thiết bị cũ ghi đè ngược thay đổi của thiết bị mới qua sync.
+      const localNewer = (localDb.settings.updatedAt || '') >= (remoteDb.settings.updatedAt || '');
       const merged = {
         tasks: mergeById(localDb.tasks, remoteDb.tasks),
         events: dedupeEvents(mergeById(localDb.events, remoteDb.events)),
         sessions: mergeById(localDb.sessions, remoteDb.sessions),
-        settings: Object.assign({}, remoteDb.settings, localDb.settings),
+        settings: localNewer
+          ? Object.assign({}, remoteDb.settings, localDb.settings)
+          : Object.assign({}, localDb.settings, remoteDb.settings),
         reviews: Object.assign({}, remoteDb.reviews, localDb.reviews)
       };
       // Keep heavy background data local-only to avoid Firestore size issues.
@@ -297,6 +305,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     }
     function setBackgroundPreset(id) {
       db.settings.backgroundPreset = id;
+      touchSettings();
       applyBackground();
       save();
       render();
@@ -306,6 +315,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       db.settings.backgroundImage = '';
       db.settings.backgroundName = '';
       db.settings.backgroundPreset = 'none';
+      touchSettings();
       applyBackground();
       save();
       render();
@@ -338,6 +348,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
           db.settings.backgroundImage = dataUrl;
           db.settings.backgroundName = file.name;
           db.settings.backgroundPreset = 'upload';
+          touchSettings();
           applyBackground();
           save();
           if (window.idbFlush) window.idbFlush(); // ảnh chỉ nằm trong IDB — ghi ngay, không chờ debounce
@@ -351,14 +362,57 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       e.target.value = '';
     }
     function seedEvents() { return SEED_EVENTS.map(ev => ({ ...ev })) }
-    function normalize() { db.settings = Object.assign({ ...SETTINGS_DEFAULTS }, db.settings || {}); db.settings.theme = normalizeThemeId(db.settings.theme); if (db.settings.backgroundPreset === 'upload' && !db.settings.backgroundImage) db.settings.backgroundPreset = 'none'; if (!Array.isArray(db.tasks)) db.tasks = []; if (!Array.isArray(db.events)) db.events = seedEvents(); if (!Array.isArray(db.sessions)) db.sessions = []; db.tasks.forEach(t => { if (!t.id) t.id = uid(); if (t.done && t.status !== 'done') t.status = 'done'; if (!t.status) t.status = t.done ? 'done' : 'todo'; if (!t.date) t.date = fmtDate(new Date()); if (!t.createdAt) t.createdAt = new Date().toISOString(); if (!t.updatedAt) t.updatedAt = t.createdAt; if (!t.duration) t.duration = 60; if (t.start && !t.end) t.end = deriveEndTime(t.start, t.duration); if (hasWrappedTimeRange(t.start, t.end)) { t.start = ''; t.end = ''; } ensureFlow(t); }); autoStackOld(); }
+    // Sanitize field theo kiểu/pattern — dữ liệu có thể đến từ import JSON hoặc Firestore
+    // sync nên KHÔNG được tin tưởng; các giá trị này được nội suy thẳng vào HTML khi render.
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
+    function safeId(v) { const s = String(v ?? ''); return s && s.length <= 100 && !/['"<>&\\]/.test(s) ? s : uid() }
+    function safeDate(v, fallback = '') { return DATE_RE.test(String(v ?? '')) ? String(v) : fallback }
+    function safeTime(v) { return TIME_RE.test(String(v ?? '')) ? String(v) : '' }
+    function safeStr(v) { return typeof v === 'string' ? v : (v == null ? '' : String(v)) }
+    function sanitizeTaskFields(t) {
+      t.id = safeId(t.id);
+      t.title = safeStr(t.title);
+      t.date = safeDate(t.date, fmtDate(new Date()));
+      t.start = safeTime(t.start); t.end = safeTime(t.end);
+      t.deadline = safeDate(t.deadline, '');
+      t.duration = clamp(Number(t.duration) || 60, 1, 1440);
+      t.priority = ['high', 'medium', 'low'].includes(t.priority) ? t.priority : 'medium';
+      if (!['todo', 'doing', 'done', 'deferred', 'stack', 'deleted'].includes(t.status)) t.status = '';
+      t.mission = !!t.mission; t.done = !!t.done;
+      t.notes = safeStr(t.notes);
+      t.reason = safeStr(t.reason);
+      t.stackType = safeStr(t.stackType);
+      t.eventId = safeStr(t.eventId);
+      t.tags = (Array.isArray(t.tags) ? t.tags : []).map(safeStr).filter(Boolean).slice(0, 50);
+      t.deferCount = Math.max(0, Math.round(Number(t.deferCount) || 0));
+    }
+    function sanitizeEventFields(ev) {
+      ev.id = safeId(ev.id);
+      ev.title = safeStr(ev.title);
+      ev.date = safeDate(ev.date, fmtDate(new Date()));
+      ev.type = ev.type === 'lunar' ? 'lunar' : 'solar';
+      ev.recurring = !!ev.recurring;
+      ev.notes = safeStr(ev.notes);
+    }
+    function sanitizeSessionFields(s) {
+      s.id = safeId(s.id);
+      s.taskId = safeStr(s.taskId);
+      s.date = safeDate(s.date, fmtDate(new Date()));
+      s.minutes = clamp(Number(s.minutes) || 0, 0, 1440);
+    }
+    function sanitizeSettingsFields(st) {
+      if (!TIME_RE.test(String(st.availableStart ?? ''))) st.availableStart = SETTINGS_DEFAULTS.availableStart;
+      if (!TIME_RE.test(String(st.availableEnd ?? ''))) st.availableEnd = SETTINGS_DEFAULTS.availableEnd;
+      st.dailyMissionLimit = clamp(Math.round(Number(st.dailyMissionLimit) || 3), 1, 20);
+      st.notifications = !!st.notifications;
+      st.backgroundPreset = safeStr(st.backgroundPreset) || 'none';
+      st.backgroundName = safeStr(st.backgroundName);
+      // Ảnh nền chỉ chấp nhận data URL base64 do app tự tạo (canvas.toDataURL)
+      if (st.backgroundImage && !/^data:image\/[a-z+.-]+;base64,[A-Za-z0-9+/=]*$/i.test(st.backgroundImage)) st.backgroundImage = '';
+    }
+    function normalize() { db.settings = Object.assign({ ...SETTINGS_DEFAULTS }, db.settings || {}); db.settings.theme = normalizeThemeId(db.settings.theme); sanitizeSettingsFields(db.settings); if (db.settings.backgroundPreset === 'upload' && !db.settings.backgroundImage) db.settings.backgroundPreset = 'none'; if (!Array.isArray(db.tasks)) db.tasks = []; if (!Array.isArray(db.events)) db.events = seedEvents(); if (!Array.isArray(db.sessions)) db.sessions = []; db.tasks.forEach(t => { sanitizeTaskFields(t); if (t.done && t.status !== 'done') t.status = 'done'; if (!t.status) t.status = t.done ? 'done' : 'todo'; if (!t.createdAt) t.createdAt = new Date().toISOString(); if (!t.updatedAt) t.updatedAt = t.createdAt; if (t.start && !t.end) t.end = deriveEndTime(t.start, t.duration); if (hasWrappedTimeRange(t.start, t.end)) { t.start = ''; t.end = ''; } ensureFlow(t); }); db.events.forEach(sanitizeEventFields); db.sessions.forEach(sanitizeSessionFields); autoStackOld(); }
     function autoStackOld() {
       const today = fmtDate(new Date());
-      // Guard: chỉ auto-stack khi ngày thực sự thay đổi (tránh stack lúc 00:00 sai)
-      const lastDate = localStorage.getItem('tl_last_opened_date');
-      if (lastDate && lastDate === today) {
-        // Cùng ngày — vẫn stack task của ngày hôm qua trở về trước nhưng không stack ngày hôm nay
-      }
       localStorage.setItem('tl_last_opened_date', today);
       db.tasks.forEach(t => {
         if (t.date < today && !['done', 'stack', 'deleted'].includes(t.status)) {
@@ -405,7 +459,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       // Register SW
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker
-          .register('./sw.js?v=13', { updateViaCache: 'none' })
+          .register('./sw.js?v=14', { updateViaCache: 'none' })
           .catch(err => console.warn('[SW]', err));
       }
     }
@@ -432,12 +486,13 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       drawer.innerHTML = secondaryTabs.map(([id, name]) =>
         `<button data-tab="${id}" style="background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px 4px;font-size:12px;color:${id === currentTab ? 'var(--text)' : 'var(--muted)'}">${name}</button>`
       ).join('');
-      drawer.addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { drawer.remove(); } });
+      const closeDrawer = () => { drawer.remove(); document.removeEventListener('click', onOutsideClick); };
+      function onOutsideClick(ev) { if (!drawer.contains(ev.target) && ev.target.id !== 'moreBtn') closeDrawer(); }
+      drawer._close = closeDrawer;
+      drawer.addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) closeDrawer(); });
       document.body.appendChild(drawer);
       // Đóng khi click ngoài
-      setTimeout(() => document.addEventListener('click', function h(ev) {
-        if (!drawer.contains(ev.target) && ev.target.id !== 'moreBtn') { drawer.remove(); document.removeEventListener('click', h); }
-      }), 0);
+      setTimeout(() => document.addEventListener('click', onOutsideClick), 0);
     }
     function bind() {
       document.body.addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { currentTab = b.dataset.tab; render(); } });
@@ -782,6 +837,8 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       const titleStr = title.join(' ').trim();
       // Validate: phải có tiêu đề thật sự (không phải chỉ là command tokens)
       if (!titleStr) { toast('⚠️ Vui lòng nhập tiêu đề task trước các lệnh'); return; }
+      // Cùng rule với saveTask: chưa hỗ trợ task vắt qua 00:00
+      if (time && hasWrappedTimeRange(time, timeOfMin(minOf(time) + dur))) { toast('Task vượt qua 00:00 chưa được hỗ trợ. Hãy tách task thành 2 phần.'); return; }
       const t = {
         id: uid(), title: titleStr, date: selectedDate,
         duration: dur, priority, start: time,
@@ -837,8 +894,11 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     }
     function runFocusTimer() {
       clearInterval(focusTimer);
+      // Tính theo wall-clock thay vì đếm tick: setInterval bị browser throttle
+      // khi tab ẩn (có thể chỉ chạy 1 lần/phút) làm phiên 25m kéo dài cả giờ.
+      focusEndAt = Date.now() + focusRemain * 1000;
       focusTimer = setInterval(() => {
-        focusRemain--;
+        focusRemain = Math.round((focusEndAt - Date.now()) / 1000);
         updateFocusRing();
         if (focusRemain <= 0) {
           notify('Focus xong', 'Hết phiên tập trung. Review task nhé.');
@@ -848,10 +908,10 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     }
     function startFocus(id, min = 25) { focusTaskId = id; focusInitialSeconds = min * 60; focusRemain = focusInitialSeconds; focusStartedAt = new Date(); runFocusTimer(); goTab('focus') }
     function setFocusPreset(m) { if (!focusTaskId) { toast('Chọn task trước'); return } startFocus(focusTaskId, m) }
-    function pauseFocus() { clearInterval(focusTimer); focusTimer = null; renderFocus(); toast('Đã pause focus') }
+    function pauseFocus() { if (focusEndAt) focusRemain = Math.max(0, Math.round((focusEndAt - Date.now()) / 1000)); focusEndAt = null; clearInterval(focusTimer); focusTimer = null; renderFocus(); toast('Đã pause focus') }
     function resumeFocus() { if (!focusTaskId || focusTimer || focusRemain <= 0) return; runFocusTimer(); renderFocus(); toast('Đã tiếp tục focus') }
     function toggleFocusTimer() { if (focusTimer) pauseFocus(); else resumeFocus(); }
-    function addFocus(m) { focusRemain += m * 60; updateFocusRing() }
+    function addFocus(m) { if (!focusTaskId) { toast('Chọn task trước'); return } focusRemain += m * 60; focusInitialSeconds += m * 60; if (focusEndAt) focusEndAt += m * 60 * 1000; updateFocusRing() }
     function completeFocus() {
       if (!focusTaskId) return;
       const taskId = focusTaskId;
@@ -864,7 +924,8 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         createdAt: endedAt.toISOString()
       };
       pushUndo('Kết thúc focus');
-      db.sessions.push({ id: uid(), taskId, date: selectedDate, minutes: elapsed, createdAt: endedAt.toISOString() });
+      // date = ngày thực tế của phiên focus (không phải ngày đang xem trên lịch)
+      db.sessions.push({ id: uid(), taskId, date: fmtDate(endedAt), minutes: elapsed, createdAt: endedAt.toISOString() });
       if (t) {
         ensureFlow(t).logs.push(log);
         t.updatedAt = endedAt.toISOString();
@@ -872,6 +933,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       pendingFocusReview = { taskId, logId: log.id, elapsed };
       clearInterval(focusTimer);
       focusTimer = null;
+      focusEndAt = null;
       focusRemain = 0;
       focusInitialSeconds = 0;
       focusStartedAt = null;
@@ -901,7 +963,10 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     // debtAge: UTC-safe — so sánh date string YYYY-MM-DD thay vì local Date object
     function debtAge(t) {
       const todayStr = fmtDate(new Date());
-      const refStr = (t.stackedAt || t.createdAt || new Date().toISOString()).slice(0, 10);
+      // stackedAt/createdAt là ISO UTC — convert sang ngày LOCAL trước khi lấy YYYY-MM-DD,
+      // slice trực tiếp sẽ lệch 1 ngày với task stack lúc 00:00-07:00 (VN = UTC+7)
+      const refIso = t.stackedAt || t.createdAt || new Date().toISOString();
+      const refStr = refIso.length > 10 ? fmtDate(new Date(refIso)) : String(refIso).slice(0, 10);
       // Parse as local noon để tránh timezone offset làm lệch 1 ngày
       const today = new Date(todayStr + 'T12:00:00');
       const ref   = new Date(refStr   + 'T12:00:00');
@@ -942,7 +1007,9 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       const nowIso = new Date().toISOString();
       db.tasks.push({ ...t, id: uid(), title: t.title + ' – phần 1', duration: half,    status: 'todo', date: selectedDate, stackType: '', stackedAt: '', reason: '', flow: defaultFlow(), createdAt: nowIso, updatedAt: nowIso });
       db.tasks.push({ ...t, id: uid(), title: t.title + ' – phần 2', duration: part2dur, status: 'todo', date: selectedDate, stackType: '', stackedAt: '', reason: '', flow: defaultFlow(), createdAt: nowIso, updatedAt: nowIso });
-      db.tasks = db.tasks.filter(x => x.id !== id);
+      // Soft-delete thay vì hard-delete: merge giữa các thiết bị là union theo id,
+      // hard-delete sẽ bị snapshot remote "hồi sinh" task gốc.
+      softDeleteTask(id);
       save();
       if (rerender) render();
       toastUndo('Đã chia nhỏ thành 2 phần');
@@ -951,7 +1018,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     function renderCalendar() { const d = parseDate(selectedDate); const first = new Date(d.getFullYear(), d.getMonth(), 1); const start = new Date(first); start.setDate(first.getDate() - ((first.getDay() + 6) % 7)); let days = ''; for (let i = 0; i < 42; i++) { const x = new Date(start); x.setDate(start.getDate() + i); const fd = fmtDate(x); const tasks = dayTasks(fd); days += `<div class="day ${x.getMonth() !== d.getMonth() ? 'off' : ''} ${fd === selectedDate ? 'sel' : ''}" onclick="selectCalendarDay('${fd}')" ondblclick="openTask(null,{date:'${fd}'})"><div class="num">${x.getDate()}</div><div class="dots">${tasks.slice(0, 6).map(t => `<span class="dot" title="${esc(t.title)}" style="background:${t.status === 'done' ? 'var(--ok)' : t.status === 'stack' ? 'var(--warn)' : 'var(--brand2)'}"></span>`).join('')}</div><div class="small muted">${tasks.length ? `${tasks.filter(t => t.status === 'done').length}/${tasks.length} done` : ''}</div></div>` } const events = eventsUpcoming(); $('#calendar').innerHTML = `<div class="row" style="margin-bottom:16px"><button class="btn" onclick="openEvent()">+ Sự kiện</button><span class="pill">Click ngày để chọn · Double click để thêm task</span><button class="btn secondary" onclick="goTab('timeline')">Mở timeline ngày chọn</button></div><div class="calendar">${['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(x => `<div class="dow">${x}</div>`).join('')}${days}</div><div class="card" style="margin-top:16px"><h3>Sự kiện + thời gian còn lại</h3><table class="table"><tr><th>Sự kiện</th><th>Ngày</th><th>Còn</th><th>Plan</th></tr>${events.map(e => `<tr><td>${esc(e.title)}</td><td>${e.date}</td><td>${e.days} ngày</td><td><button class="btn sm secondary" onclick="addPlanTask('${e.id}')">+ task chuẩn bị</button></td></tr>`).join('')}</table></div>` }
     function selectCalendarDay(d) { selectedDate = d; $('#selectedDate').value = d; render() }
     function openEvent() { $('#eTitle').value = ''; $('#eDate').value = selectedDate; $('#eType').value = 'solar'; $('#eRecurring').value = 'yes'; $('#eNotes').value = ''; openModal('eventModal') }
-    function saveEvent() { const date = $('#eDate').value; if (!date) { toast('Vui lòng chọn ngày cho sự kiện.'); return; } db.events.push({ id: uid(), title: $('#eTitle').value || 'Sự kiện', type: $('#eType').value, date, recurring: $('#eRecurring').value === 'yes', notes: $('#eNotes').value }); save(); closeModal('eventModal'); render() }
+    function saveEvent() { const date = $('#eDate').value; if (!date) { toast('Vui lòng chọn ngày cho sự kiện.'); return; } const nowIso = new Date().toISOString(); db.events.push({ id: uid(), title: $('#eTitle').value || 'Sự kiện', type: $('#eType').value, date, recurring: $('#eRecurring').value === 'yes', notes: $('#eNotes').value, createdAt: nowIso, updatedAt: nowIso }); save(); closeModal('eventModal'); render() }
     function eventsUpcoming() {
       const now = startOfDay(new Date());
       return db.events
@@ -1067,7 +1134,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         <div class="card syncCard"><div class="syncCardHead"><div><h3>Đồng bộ Đám mây</h3><div class="appearanceNote">Mỗi tài khoản Google là một workspace riêng. Đăng nhập cùng tài khoản trên nhiều thiết bị để cùng dùng một workspace cá nhân.</div></div><span class="metricBadge ${syncInfo.status === 'error' ? 'warn' : syncInfo.status === 'synced' ? 'ok' : ''}">${syncLabels[syncInfo.status] || syncInfo.status}</span></div>${syncInfo.error ? `<div class="small warnText" style="margin:10px 0">${esc(syncInfo.error)}</div>` : ''}${conflictHtml}<div class="row" style="margin-top:12px">${loginHtml}</div></div>
         <div class="card"><h3>Appearance</h3><div class="appearanceNote" style="margin-bottom:12px">Bộ giao diện mới ưu tiên cảm giác editor/dashboard: có theme kiểu GitHub, GitLab, VS Code và nền anime-inspired nhưng vẫn giữ focus vào nội dung.</div>${themePickerHTML()}</div><div class="card"><h3>Background</h3><div class="appearanceNote" style="margin-bottom:12px">Bạn có thể dùng nền dựng sẵn hoặc upload ảnh riêng. Ảnh tải lên sẽ được nén trước khi lưu để app vẫn nhẹ.</div>${backgroundPickerHTML()}<div style="margin-top:14px" class="uploadRow"><button class="btn" onclick="uploadBackgroundPrompt()">Tải ảnh nền</button><button class="btn secondary" onclick="clearBackgroundImage()">Xóa ảnh cá nhân</button><span class="fileName">${esc(db.settings.backgroundName || 'Chưa có ảnh nền tùy chỉnh')}</span></div><input id="bgUpload" type="file" accept="image/*" hidden onchange="handleBackgroundUpload(event)"></div><div class="card"><h3>Lịch làm việc</h3><div class="form"><label>Giờ bắt đầu khả dụng<input class="input" type="time" id="setStart" value="${db.settings.availableStart}"></label><label>Giờ kết thúc khả dụng<input class="input" type="time" id="setEnd" value="${db.settings.availableEnd}"></label><label>Giới hạn việc chính hôm nay<input class="input" type="number" id="setMission" value="${db.settings.dailyMissionLimit}"></label><div class="full"><button class="btn" onclick="saveSettings()">Lưu settings</button></div></div></div><div class="card"><h3>Offline app</h3><p>Trạng thái hiện tại: <b>${navigator.onLine ? 'Online' : 'Offline'}</b>. App cache bằng service worker và dữ liệu vẫn lưu trong trình duyệt.</p><p class="small muted">Bộ nhớ dữ liệu: <b>${window.idbActive ? 'IndexedDB (ổn định, dung lượng lớn)' : 'localStorage (chế độ dự phòng)'}</b></p></div></div>`;
     }
-    function saveSettings() { const start = $('#setStart').value; const end = $('#setEnd').value; const missionLimit = Number($('#setMission').value) || 3; if (start && end && minOf(end) <= minOf(start)) { toast('Giờ kết thúc phải lớn hơn giờ bắt đầu.'); return; } db.settings.availableStart = start; db.settings.availableEnd = end; db.settings.dailyMissionLimit = missionLimit; save(); render(); toast('Đã lưu settings') }
+    function saveSettings() { const start = $('#setStart').value; const end = $('#setEnd').value; const missionLimit = Number($('#setMission').value) || 3; if (start && end && minOf(end) <= minOf(start)) { toast('Giờ kết thúc phải lớn hơn giờ bắt đầu.'); return; } db.settings.availableStart = start; db.settings.availableEnd = end; db.settings.dailyMissionLimit = missionLimit; touchSettings(); save(); render(); toast('Đã lưu settings') }
     function openModal(id) {
       const modal = $('#' + id);
       if (!modal) return;
@@ -1139,23 +1206,26 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       if (!('Notification' in window)) { toast('Trình duyệt không hỗ trợ thông báo'); return; }
       if (Notification.permission === 'denied') {
         db.settings.notifications = false;
+        touchSettings();
         save();
         toast('Bạn đã chặn thông báo. Hãy bật lại trong cài đặt trình duyệt nếu cần.');
         return;
       }
       if (Notification.permission === 'granted') {
         db.settings.notifications = true;
+        touchSettings();
         save();
         toast('Thông báo đã được bật trước đó.');
         return;
       }
       Notification.requestPermission().then(p => {
         db.settings.notifications = p === 'granted';
+        touchSettings();
         save();
         toast(p === 'granted' ? 'Đã bật thông báo' : 'Chưa cấp quyền');
       });
     }
-    function notify(title, body) { if (db.settings.notifications && Notification.permission === 'granted') new Notification(title, { body }); else toast(title + ' - ' + body) }
+    function notify(title, body) { if (('Notification' in window) && db.settings.notifications && Notification.permission === 'granted') new Notification(title, { body }); else toast(title + ' - ' + body) }
     // SW registered once in init() — no duplicate here
     window.openTask = openTask; window.openTaskDetail = openTaskDetail; window.closeModal = closeModal; window.quickDur = quickDur; window.quickAdd = quickAdd; window.autoSchedule = autoSchedule; window.timelineClick = timelineClick; window.markDone = markDone; window.startFocus = startFocus; window.moveToStack = moveToStack; window.openTriage = openTriage; window.doToday = doToday; window.scheduleDebt = scheduleDebt; window.splitTask = splitTask; window.deleteById = deleteById; window.triageAction = triageAction; window.renderTriage = renderTriage; window.pauseFocus = pauseFocus; window.resumeFocus = resumeFocus; window.toggleFocusTimer = toggleFocusTimer; window.completeFocus = completeFocus; window.closeFocusReview = closeFocusReview; window.focusReviewDone = focusReviewDone; window.focusReviewSave = focusReviewSave; window.focusReviewNextAction = focusReviewNextAction; window.focusReviewStack = focusReviewStack; window.addFocus = addFocus; window.setFocusPreset = setFocusPreset; window.selectCalendarDay = selectCalendarDay; window.openEvent = openEvent; window.addPlanTask = addPlanTask; window.saveSettings = saveSettings; window.setTheme = setTheme; window.setBackgroundPreset = setBackgroundPreset; window.uploadBackgroundPrompt = uploadBackgroundPrompt; window.clearBackgroundImage = clearBackgroundImage; window.handleBackgroundUpload = handleBackgroundUpload; window.setAnalyticsPreview = setAnalyticsPreview; window.openAnalyticsDate = openAnalyticsDate; window.updateTaskFilter = updateTaskFilter; window.updateFlowSummary = updateFlowSummary; window.addFlowItem = addFlowItem; window.removeFlowItem = removeFlowItem; window.toggleFlowCheck = toggleFlowCheck; window.undoLast = undoLast; window.toast = toast; window.render = render; window.loginOrSyncHelp = loginOrSyncHelp; window.getTimelineDb = () => db; window.getTimelineDbSnapshot = getDbSnapshot;
     init();

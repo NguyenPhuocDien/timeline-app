@@ -93,7 +93,9 @@ export function sanitizeTaskForFirestore(task) {
   out.id = String(task.id || '');
   out.title = String(task.title || '').slice(0, 500);
   out.date = String(task.date || '').slice(0, 10);
-  out.duration = Math.max(0, Math.min(1440, Number(task.duration) || 60));
+  // Math.round bắt buộc: firestore.rules đòi `is int` — một giá trị float làm
+  // CẢ batch commit fail (all-or-nothing) → sync kẹt vĩnh viễn ở trạng thái error.
+  out.duration = Math.round(Math.max(0, Math.min(1440, Number(task.duration) || 60)));
   out.priority = TASK_PRIORITIES.includes(task.priority) ? task.priority : 'medium';
   out.status = TASK_STATUSES.includes(task.status) ? task.status : 'todo';
 
@@ -112,8 +114,9 @@ export function sanitizeTaskForFirestore(task) {
   if (task.stackType) out.stackType = String(task.stackType).slice(0, 50);
   if (task.stackedAt) out.stackedAt = String(task.stackedAt).slice(0, 30);
   if (task.reason) out.reason = String(task.reason).slice(0, 500);
-  if (task.deferCount !== undefined) out.deferCount = Math.max(0, Number(task.deferCount) || 0);
+  if (task.deferCount !== undefined) out.deferCount = Math.round(Math.max(0, Number(task.deferCount) || 0));
   if (task.doneAt) out.doneAt = String(task.doneAt).slice(0, 30);
+  if (task.deletedAt) out.deletedAt = String(task.deletedAt).slice(0, 30);
 
   // Tags = array of strings (app.js dùng `(t.tags || []).map(x => '#' + x)`)
   if (Array.isArray(task.tags)) {
@@ -180,6 +183,7 @@ export function sanitizeEventForFirestore(event) {
   if (event.notes) out.notes = String(event.notes).slice(0, 5000);
   if (event.createdAt) out.createdAt = String(event.createdAt).slice(0, 30);
   if (event.updatedAt) out.updatedAt = String(event.updatedAt).slice(0, 30);
+  if (event.deletedAt) out.deletedAt = String(event.deletedAt).slice(0, 30);
   if (event.migratedFrom) out.migratedFrom = event.migratedFrom;
   return out;
 }
@@ -191,9 +195,11 @@ export function sanitizeSessionForFirestore(session) {
   if (session.taskId) out.taskId = String(session.taskId).slice(0, 100);
   if (session.date) out.date = String(session.date).slice(0, 10);
   if (session.minutes !== undefined) {
-    out.minutes = Math.max(0, Math.floor(Number(session.minutes) || 0));
+    // Cap 1440 khớp rules (`minutes <= 1440`) — vượt trần làm cả batch fail
+    out.minutes = Math.min(1440, Math.max(0, Math.floor(Number(session.minutes) || 0)));
   }
   if (session.createdAt) out.createdAt = String(session.createdAt).slice(0, 30);
+  if (session.deletedAt) out.deletedAt = String(session.deletedAt).slice(0, 30);
   if (session.migratedFrom) out.migratedFrom = session.migratedFrom;
   return out;
 }
@@ -231,8 +237,10 @@ export function sanitizeSettingsForFirestore(settings) {
 export function sanitizeReviewsForFirestore(reviews) {
   if (!reviews || typeof reviews !== 'object') return {};
   const out = {};
-  // Giới hạn 365 ngày để không vỡ 1MB doc
-  const keys = Object.keys(reviews).slice(-365);
+  // Giới hạn 365 ngày để không vỡ 1MB doc. Sort trước khi cắt: object từ Firestore
+  // trả key đã sort, object local theo insertion-order — không sort thì 2 phía cắt
+  // ra tập key khác nhau → diff giả → push lặp vô hạn.
+  const keys = Object.keys(reviews).sort().slice(-365);
   for (const k of keys) {
     if (typeof k !== 'string' || k.length > 30) continue;
     const v = reviews[k];

@@ -214,7 +214,9 @@ window.firebaseLogout = () => {
 };
 
 async function handleAuthStateChange(user) {
-  // Cleanup
+  // Cleanup — hủy cả push đang chờ debounce: timer cũ bắn sau khi đổi user sẽ
+  // diff với baseline null và có thể đẩy data của user cũ sang account mới.
+  if (pushDebounceTimer) { clearTimeout(pushDebounceTimer); pushDebounceTimer = null; }
   unsubscribers.forEach((u) => { try { u(); } catch {} });
   unsubscribers = [];
   initialSyncDone = false;
@@ -297,11 +299,18 @@ function subscribeToCollections(uid) {
   const remoteSessions = new Map();
   let remoteSettings = null;
   let remoteReviews = null;
-  let initialLoadsRemaining = 5;
+  // Đếm theo NGUỒN đã load, không đếm số lần snapshot bắn: với persistentLocalCache
+  // mỗi listener có thể bắn 2 lần (cache + server) → counter kiểu trừ dần sẽ về 0
+  // trước khi đủ 5 nguồn, chốt baseline thiếu settings/reviews.
+  const loadedSources = new Set();
 
-  function onInitialLoad() {
-    initialLoadsRemaining -= 1;
-    if (initialLoadsRemaining === 0) {
+  function onSourceSnapshot(source) {
+    if (initialSyncDone) {
+      mergeAndApply();
+      return;
+    }
+    loadedSources.add(source);
+    if (loadedSources.size === 5) {
       mergeAndApply();
       initialSyncDone = true;
       setSyncStatus('synced');
@@ -348,8 +357,7 @@ function subscribeToCollections(uid) {
         remoteTasks.set(id, { ...data, id, status: data.deletedAt ? 'deleted' : data.status });
       }
     });
-    if (initialLoadsRemaining > 0) onInitialLoad();
-    else mergeAndApply();
+    onSourceSnapshot('tasks');
   }, (err) => handleSyncError('tasks', err)));
 
   // Events
@@ -363,8 +371,7 @@ function subscribeToCollections(uid) {
         remoteEvents.set(id, { ...data, id });
       }
     });
-    if (initialLoadsRemaining > 0) onInitialLoad();
-    else mergeAndApply();
+    onSourceSnapshot('events');
   }, (err) => handleSyncError('events', err)));
 
   // Sessions
@@ -378,22 +385,19 @@ function subscribeToCollections(uid) {
         remoteSessions.set(id, { ...data, id });
       }
     });
-    if (initialLoadsRemaining > 0) onInitialLoad();
-    else mergeAndApply();
+    onSourceSnapshot('sessions');
   }, (err) => handleSyncError('sessions', err)));
 
   // Settings (single doc)
   unsubscribers.push(onSnapshot(settingsRef, (snap) => {
     remoteSettings = snap.exists() ? snap.data() : {};
-    if (initialLoadsRemaining > 0) onInitialLoad();
-    else mergeAndApply();
+    onSourceSnapshot('settings');
   }, (err) => handleSyncError('settings', err)));
 
   // Reviews (single doc with object map)
   unsubscribers.push(onSnapshot(reviewsRef, (snap) => {
     remoteReviews = snap.exists() ? (snap.data().data || {}) : {};
-    if (initialLoadsRemaining > 0) onInitialLoad();
-    else mergeAndApply();
+    onSourceSnapshot('reviews');
   }, (err) => handleSyncError('reviews', err)));
 }
 
@@ -479,6 +483,8 @@ window.firebaseSync = (localDb) => {
 
 async function actuallyPush(localDb) {
   if (!window.currentUserId || !dbFire) return;
+  // Hàng rào thứ hai: timer cũ có thể bắn sau khi đổi user/re-subscribe
+  if (!initialSyncDone) return;
 
   setSyncStatus('syncing');
 
@@ -594,7 +600,11 @@ async function commitBatched(uid, ops) {
           updatedAt: op.data.updatedAt || new Date().toISOString(),
         };
         if (!op.data.createdAt) dataWithStamp.createdAt = dataWithStamp.updatedAt;
-        batch.set(ref, dataWithStamp, { merge: true });
+        // settings/main & reviews/main: REPLACE toàn doc, không merge.
+        // merge:true deep-merge map lồng nhau → key review đã xóa/cắt ở client
+        // không bao giờ biến mất trên server, doc phình dần tới trần 1MB.
+        const isSingletonDoc = collName === 'settings' || collName === 'reviews';
+        batch.set(ref, dataWithStamp, { merge: !isSingletonDoc });
       }
     }
 
