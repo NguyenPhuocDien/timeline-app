@@ -20,6 +20,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {
   getAuth,
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   GoogleAuthProvider,
@@ -140,36 +141,67 @@ export function initSyncEngine(config = DEFAULT_CONFIG) {
 // ════════════════════════════════════════════════════════════════════════════
 window.firebaseLogin = async () => {
   if (!auth) {
-    showToast('⚠️ Sync engine chưa init.');
+    showToast('Đồng bộ chưa sẵn sàng, thử lại sau vài giây.');
     return;
   }
+
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
+
+  const btn = document.getElementById('loginBtn');
+  const previousButtonHtml = btn?.innerHTML;
+
   try {
-    const btn = document.getElementById('loginBtn');
-    if (btn) btn.innerHTML = '⏳ Đang xử lý...';
-    showToast('Đang chuyển sang Google để đăng nhập...');
-    await signInWithRedirect(auth, provider);
+    if (btn) {
+      btn.innerHTML = 'Đang mở Google...';
+      btn.disabled = true;
+    }
+
+    showToast('Đang mở cửa sổ Google để đăng nhập...');
+    const result = await signInWithPopup(auth, provider);
+    if (result?.user) {
+      showToast('Đã đăng nhập Google: ' + (result.user.email || result.user.displayName || 'OK'));
+    }
   } catch (err) {
-    if ([
+    if (err?.code === 'auth/popup-closed-by-user') {
+      showToast('Đã hủy đăng nhập Google.');
+    } else if ([
       'auth/popup-blocked',
       'auth/cancelled-popup-request',
-      'auth/internal-error',
       'auth/operation-not-supported-in-this-environment',
     ].includes(err?.code)) {
-      showToast('Popup bị chặn, đang chuyển sang Google...');
+      showToast('Popup bị chặn, đang chuyển sang chế độ đăng nhập toàn trang...');
       try {
         await signInWithRedirect(auth, provider);
-      } catch (e2) {
-        showToast('❌ Đăng nhập thất bại: ' + (e2?.message || e2));
-        if (window.Sentry) window.Sentry.captureException(e2);
+      } catch (redirectErr) {
+        showToast('Đăng nhập thất bại: ' + getAuthErrorMessage(redirectErr));
+        if (window.Sentry) window.Sentry.captureException(redirectErr);
       }
-      return;
+    } else {
+      showToast('Đăng nhập thất bại: ' + getAuthErrorMessage(err));
+      if (window.Sentry) window.Sentry.captureException(err);
     }
-    showToast('❌ Đăng nhập thất bại: ' + (err?.message || err));
-    if (window.Sentry) window.Sentry.captureException(err);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      if (!auth.currentUser && previousButtonHtml) btn.innerHTML = previousButtonHtml;
+    }
   }
 };
+
+function getAuthErrorMessage(err) {
+  const code = err?.code || '';
+  if (code === 'auth/unauthorized-domain') {
+    return 'domain chưa được cho phép trong Firebase Auth.';
+  }
+  if (code === 'auth/internal-error') {
+    return 'Google/Firebase trả về lỗi nội bộ. Hãy thử lại bằng popup hoặc kiểm tra domain OAuth.';
+  }
+  if (code === 'auth/network-request-failed') {
+    return 'lỗi mạng khi kết nối Google.';
+  }
+  return err?.message || String(err || 'unknown error');
+}
 
 window.firebaseLogout = () => {
   if (!auth) return;

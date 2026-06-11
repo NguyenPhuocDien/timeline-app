@@ -153,7 +153,7 @@ service cloud.firestore {
         && (data.get('mission', false) is bool)
         && (data.get('done', false) is bool)
         // deferCount
-        && (data.get('deferCount', 0) is int && data.deferCount >= 0)
+        && (data.get('deferCount', 0) is int && data.get('deferCount', 0) >= 0)
         // tags là list
         && (data.tags is list && data.tags.size() <= 50)
         // flow là map
@@ -220,7 +220,9 @@ service cloud.firestore {
         && isOptionalString(data.get('id', null), 100)
         && isOptionalString(data.get('taskId', null), 100)
         && isOptionalString(data.get('date', null), 10)
-        && (data.get('minutes', 0) is int && data.minutes >= 0 && data.minutes <= 1440)
+        && (data.get('minutes', 0) is int
+            && data.get('minutes', 0) >= 0
+            && data.get('minutes', 0) <= 1440)
         && isOptionalString(data.get('createdAt', null), 30)
         && isOptionalString(data.get('updatedAt', null), 30)
         && isOptionalString(data.get('deletedAt', null), 30);
