@@ -1,0 +1,17 @@
+.firebase/
+.firebaserc
+.gitignore
+.npmignore
+.vercel/
+AGENTS.md
+README.md
+firebase-debug.log
+firebase.json
+firestore.indexes.json
+firestore.rules
+package.json
+playwright.config.js
+test-results/
+playwright-report/
+snapshots/
+*.tmp.js

@@ -109,6 +109,10 @@ export function sanitizeTaskForFirestore(task) {
   if (task.deadline) out.deadline = String(task.deadline).slice(0, 8);
   if (task.notes) out.notes = String(task.notes).slice(0, 10000);
   if (task.eventId) out.eventId = String(task.eventId).slice(0, 100);
+  if (task.projectId) out.projectId = String(task.projectId).slice(0, 100);
+  if (task.goalId) out.goalId = String(task.goalId).slice(0, 100);
+  if (task.impact) out.impact = ['high', 'medium', 'low'].includes(task.impact) ? task.impact : 'medium';
+  if (task.energy) out.energy = ['deep', 'normal', 'light'].includes(task.energy) ? task.energy : 'normal';
 
   // Stack-related
   if (task.stackType) out.stackType = String(task.stackType).slice(0, 50);
@@ -223,9 +227,46 @@ export function sanitizeSettingsForFirestore(settings) {
   if (settings.backgroundPreset != null) {
     out.backgroundPreset = settings.backgroundPreset === 'upload' ? 'none' : String(settings.backgroundPreset).slice(0, 50);
   }
+  if (settings.workspace && typeof settings.workspace === 'object') {
+    out.workspace = sanitizeWorkspace(settings.workspace);
+  }
   if (settings.updatedAt != null) out.updatedAt = String(settings.updatedAt).slice(0, 30);
   if (settings.migratedFrom != null) out.migratedFrom = settings.migratedFrom;
   return out;
+}
+
+function sanitizeWorkspace(workspace) {
+  const projects = Array.isArray(workspace.projects) ? workspace.projects : [];
+  const goals = Array.isArray(workspace.goals) ? workspace.goals : [];
+  const notes = Array.isArray(workspace.notes) ? workspace.notes : [];
+  return {
+    projects: projects.slice(0, 24).map(p => ({
+      id: String(p?.id || '').slice(0, 100),
+      name: String(p?.name || 'Project').slice(0, 80),
+      color: String(p?.color || '#2563eb').slice(0, 20),
+      status: p?.status === 'archived' ? 'archived' : 'active'
+    })).filter(p => p.id),
+    goals: goals.slice(0, 24).map(g => ({
+      id: String(g?.id || '').slice(0, 100),
+      title: String(g?.title || 'Goal').slice(0, 120),
+      projectId: String(g?.projectId || '').slice(0, 100),
+      targetDate: String(g?.targetDate || '').slice(0, 10),
+      confidence: ['on-track', 'at-risk', 'off-track'].includes(g?.confidence) ? g.confidence : 'on-track',
+      status: g?.status === 'archived' ? 'archived' : 'active',
+      createdAt: String(g?.createdAt || '').slice(0, 30),
+      updatedAt: String(g?.updatedAt || '').slice(0, 30)
+    })).filter(g => g.id),
+    // Sticky notes sống trong workspace để sync qua doc settings sẵn có
+    // (rules chỉ validate `workspace is map`, không cần đổi/deploy lại rules).
+    notes: notes.slice(0, 50).map(n => ({
+      id: String(n?.id || '').slice(0, 100),
+      text: String(n?.text || '').slice(0, 2000),
+      color: /^#[0-9a-f]{6}$/i.test(String(n?.color || '')) ? String(n.color) : '#fff7cc',
+      createdAt: String(n?.createdAt || '').slice(0, 30),
+      updatedAt: String(n?.updatedAt || '').slice(0, 30)
+    })).filter(n => n.id),
+    birthDate: /^\d{4}-\d{2}-\d{2}$/.test(String(workspace.birthDate || '')) ? workspace.birthDate : ''
+  };
 }
 
 /**

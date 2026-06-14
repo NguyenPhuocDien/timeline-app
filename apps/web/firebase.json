@@ -9,17 +9,27 @@
     "public": ".",
     "ignore": [
       "firebase.json",
+      ".firebaserc",
+      ".npmignore",
+      ".gitignore",
+      ".vercelignore",
       "**/.*",
       "**/node_modules/**",
       "__/**",
+      ".firebase/**",
       "test-results/**",
+      "playwright-report/**",
+      "snapshots/**",
       "*.log",
+      "*.tmp.js",
+      "firestore.rules",
+      "firestore.indexes.json",
+      "vercel.json",
       "package.json",
       "package-lock.json",
       "playwright.config.js",
       "AGENTS.md",
-      "README.md",
-      "index_v1.html"
+      "README.md"
     ],
     "headers": [
       {
@@ -53,17 +63,27 @@
     "public": ".",
     "ignore": [
       "firebase.json",
+      ".firebaserc",
+      ".npmignore",
+      ".gitignore",
+      ".vercelignore",
       "**/.*",
       "**/node_modules/**",
       "__/**",
+      ".firebase/**",
       "test-results/**",
+      "playwright-report/**",
+      "snapshots/**",
       "*.log",
+      "*.tmp.js",
+      "firestore.rules",
+      "firestore.indexes.json",
+      "vercel.json",
       "package.json",
       "package-lock.json",
       "playwright.config.js",
       "AGENTS.md",
-      "README.md",
-      "index_v1.html"
+      "README.md"
     ],
     "headers": [
       {

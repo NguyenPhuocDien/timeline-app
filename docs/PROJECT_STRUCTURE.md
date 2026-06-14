@@ -10,9 +10,11 @@ timeline-app/
     web/                 # Deployable static Firebase PWA
   docs/
     archive/             # Historical audits, rollout notes, deployment docs
+    prototypes/          # Archived demos and visual explorations
   packages/              # Future shared code, intentionally empty for now
   tests/
     e2e/                 # Cross-app Playwright tests
+  tools/                 # Local-only debugging and maintenance scripts
   .github/workflows/
     ci.yml
   package.json
@@ -27,7 +29,9 @@ The web app is still a static PWA. The structure is ready for a future Next.js m
 - `apps/` contains deployable products.
 - `packages/` is reserved for shared code only.
 - `docs/` is repository-level knowledge, not runtime app code. Historical migration notes live in `docs/archive`.
+- `docs/prototypes/` keeps design/demo references outside the deployable app root.
 - `tests/e2e/` validates user flows across app boundaries.
+- `tools/` is for local-only scripts that should never ship with the PWA.
 - The root `package.json` owns workspaces and top-level commands.
 
 ## References

@@ -78,12 +78,12 @@
         <button class="btn secondary" id="notifyBtn"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 21a2 2 0 0 0 3.4 0"/><path d="M4 17h16"/><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/></svg>Thông báo</button>
       </div>
     
-    <div class="legalLinks" style="padding:12px;font-size:11px;color:var(--muted, #999);text-align:center;border-top:1px solid var(--line, #e5e7eb);margin-top:auto">
-      <a href="/privacy.html" target="_blank" rel="noopener" style="color:inherit">Quyền riêng tư</a>
-      <span style="margin:0 4px">·</span>
-      <a href="/terms.html" target="_blank" rel="noopener" style="color:inherit">Điều khoản</a>
-      <span style="margin:0 4px">·</span>
-      <a href="/contact.html" target="_blank" rel="noopener" style="color:inherit">Liên hệ</a>
+    <div class="legalLinks" style="padding:14px 12px;font-size:11px;color:var(--muted, #71717a);text-align:center;border-top:1px solid var(--line, #e4e4e7);display:flex;justify-content:center;gap:8px;align-items:center;flex-wrap:wrap">
+      <a href="/privacy.html" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;transition:color .15s" onmouseover="this.style.color='var(--brand)'" onmouseout="this.style.color='inherit'">Quyền riêng tư</a>
+      <span style="opacity:.4">·</span>
+      <a href="/terms.html" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;transition:color .15s" onmouseover="this.style.color='var(--brand)'" onmouseout="this.style.color='inherit'">Điều khoản</a>
+      <span style="opacity:.4">·</span>
+      <a href="/contact.html" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;transition:color .15s" onmouseover="this.style.color='var(--brand)'" onmouseout="this.style.color='inherit'">Liên hệ</a>
     </div>
   </aside>
     <main class="main" id="main-content" tabindex="-1">
@@ -111,83 +111,41 @@
   </div>
   <nav class="mobileTabs" id="mobileTabs" role="navigation" aria-label="Mobile tabs"></nav>
   <div class="modal" id="taskModal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
-    <div class="dialog taskDialog">
-      <div class="taskModalHead">
-        <div>
-          <div class="eyebrow">Task editor</div>
-          <div class="h1" id="taskModalTitle">Thêm task</div>
-        </div>
-        <button class="btn secondary iconBtnText" onclick="closeModal('taskModal')" aria-label="Đóng modal"><svg
-            class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"
-            stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>Đóng</button>
+    <div class="dialog">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <div class="h1" id="taskModalTitle">Thêm task</div><button class="btn secondary"
+          onclick="closeModal('taskModal')" aria-label="Đóng modal"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>Đóng</button>
       </div>
-      <div class="form taskFormGrid">
-        <section class="taskFormSection taskFormMain">
-          <div class="formSectionTitle">Nội dung</div>
-          <label class="field full">Tiêu đề<input class="input" id="fTitle" placeholder="Việc quan trọng cần hoàn thành"></label>
-          <div class="fieldPair">
-            <label class="field">Project<select id="fProject"></select></label>
-            <label class="field">Goal<select id="fGoal"></select></label>
-          </div>
-          <label class="field full">Ghi chú<textarea id="fNotes" placeholder="Mục tiêu, phạm vi, kết quả mong muốn..."></textarea></label>
-          <label class="field full">Tag<input class="input" id="fTags" placeholder="#study #work"></label>
-        </section>
-        <section class="taskFormSection">
-          <div class="formSectionTitle">Lịch & nhịp làm</div>
-          <div class="fieldPair">
-            <label class="field">Ngày<input class="input" id="fDate" type="date"></label>
-            <label class="field">Duration phút<input class="input" id="fDuration" type="number" min="5" step="5"></label>
-          </div>
-          <div class="fieldPair three">
-            <label class="field">Bắt đầu<input class="input" id="fStart" type="time"></label>
-            <label class="field">Kết thúc<input class="input" id="fEnd" type="time"></label>
-            <label class="field">Deadline<input class="input" id="fDeadline" type="time"></label>
-          </div>
-          <div class="durationChips" aria-label="Chọn nhanh thời lượng">
-            <button class="btn ghost" type="button" onclick="quickDur(25)">25m</button>
-            <button class="btn ghost" type="button" onclick="quickDur(50)">50m</button>
-            <button class="btn ghost" type="button" onclick="quickDur(90)">90m</button>
-            <button class="btn ghost" type="button" onclick="quickDur(120)">2h</button>
-          </div>
-        </section>
-        <section class="taskFormSection">
-          <div class="formSectionTitle">Ưu tiên & trạng thái</div>
-          <div class="fieldPair">
-            <label class="field">Priority<select id="fPriority">
-                <option value="high">Cao</option>
-                <option value="medium">Vừa</option>
-                <option value="low">Thấp</option>
-              </select></label>
-            <label class="field">Trạng thái<select id="fStatus">
-                <option value="todo">todo</option>
-                <option value="doing">doing</option>
-                <option value="done">done</option>
-                <option value="deferred">deferred</option>
-                <option value="stack">stack</option>
-              </select></label>
-          </div>
-          <div class="fieldPair">
-            <label class="field">Impact<select id="fImpact">
-                <option value="high">Tác động cao</option>
-                <option value="medium">Tác động vừa</option>
-                <option value="low">Tác động thấp</option>
-              </select></label>
-            <label class="field">Energy<select id="fEnergy">
-                <option value="deep">Deep work</option>
-                <option value="normal">Bình thường</option>
-                <option value="light">Nhẹ</option>
-              </select></label>
-          </div>
-          <label class="field full">Liên kết sự kiện<select id="fEvent"></select></label>
-          <div class="checks formChecks">
-            <label class="checkCard"><input type="checkbox" id="fMission"> <span>Việc chính hôm nay</span></label>
-            <label class="checkCard"><input type="checkbox" id="fDone"> <span>Done</span></label>
-          </div>
-        </section>
-        <div class="taskModalActions">
-          <button class="btn" id="saveTaskBtn">Lưu task</button>
-          <button class="btn secondary" id="deleteTaskBtn">Xoá</button>
-        </div>
+      <div class="form">
+        <label>Tiêu đề<input class="input" id="fTitle"></label>
+        <label>Ngày<input class="input" id="fDate" type="date"></label>
+        <label>Duration phút<input class="input" id="fDuration" type="number" min="5" step="5"></label>
+        <label>Priority<select id="fPriority">
+            <option value="high">Cao</option>
+            <option value="medium">Vừa</option>
+            <option value="low">Thấp</option>
+          </select></label>
+        <label>Bắt đầu<input class="input" id="fStart" type="time"></label>
+        <label>Kết thúc<input class="input" id="fEnd" type="time"></label>
+        <label>Deadline<input class="input" id="fDeadline" type="time"></label>
+        <label>Trạng thái<select id="fStatus">
+            <option value="todo">todo</option>
+            <option value="doing">doing</option>
+            <option value="done">done</option>
+            <option value="deferred">deferred</option>
+            <option value="stack">stack</option>
+          </select></label>
+        <label>Tag<input class="input" id="fTags" placeholder="#study #work"></label>
+        <label>Liên kết sự kiện<select id="fEvent"></select></label>
+        <label class="full">Ghi chú<textarea id="fNotes"></textarea></label>
+        <div class="checks full"><label><input type="checkbox" id="fMission"> Việc chính hôm nay</label><label><input
+              type="checkbox" id="fDone"> Done</label></div>
+        <div class="full row"><button class="btn" id="saveTaskBtn">Lưu</button><button class="btn secondary"
+            id="deleteTaskBtn">Xoá</button><button class="btn ghost" type="button"
+            onclick="quickDur(25)">25m</button><button class="btn ghost" type="button"
+            onclick="quickDur(50)">50m</button><button class="btn ghost" type="button"
+            onclick="quickDur(90)">90m</button><button class="btn ghost" type="button"
+            onclick="quickDur(120)">2h</button></div>
       </div>
     </div>
   </div>
@@ -254,12 +212,12 @@
     </div>
   </div>
   <div class="toast" id="toast"></div>
-  <script src="app.js?v=19"></script>
+  <script src="app.js?v=16"></script>
 
   <!-- Local storage engine (IndexedDB/Dexie), Firebase Auth, Firestore sync, and sync status UI -->
-  <script type="module" src="src/core/storage.js?v=19"></script>
-  <script type="module" src="src/core/sync-engine.js?v=19"></script>
-  <script type="module" src="src/ui/sync-indicator.js?v=19"></script>
+  <script type="module" src="src/core/storage.js?v=16"></script>
+  <script type="module" src="src/core/sync-engine.js?v=16"></script>
+  <script type="module" src="src/ui/sync-indicator.js?v=16"></script>
 </body>
 
 </html>

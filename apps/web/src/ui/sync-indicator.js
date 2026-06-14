@@ -83,7 +83,17 @@ function injectKeyframes() {
       to { transform: rotate(360deg); }
     }
     @media (max-width: 640px) {
-      #syncIndicator { bottom: max(70px, env(safe-area-inset-bottom, 0px) + 70px) !important; }
+      #syncIndicator {
+        bottom: max(62px, env(safe-area-inset-bottom, 0px) + 62px) !important;
+        right: 8px !important;
+        max-width: 34px;
+        width: 34px;
+        height: 28px;
+        justify-content: center;
+        padding: 5px !important;
+        z-index: 35 !important;
+      }
+      #syncIndicator span:last-child { display: none !important; }
     }
   `;
   document.head.appendChild(style);

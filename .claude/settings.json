@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -)",
+      "Bash(node --check apps/web/src/core/sync-engine.js)",
+      "Bash(node --input-type=module --eval \"import\\('file:///' + process.cwd\\(\\).replace\\(/\\\\\\\\\\\\\\\\/g,'/'\\) + '/apps/web/src/core/sync-engine.js'\\).catch\\(e => { if \\(e.message.includes\\('https://'\\)\\) { console.log\\('SYNTAX OK \\(import URL unsupported in node, expected\\)'\\); } else { console.error\\(e.message\\); process.exit\\(1\\); } }\\)\")"
+    ]
+  }
+}

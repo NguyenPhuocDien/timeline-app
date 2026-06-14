@@ -1,5 +1,6 @@
 node_modules/
 .vercel/
+.firebase/
 playwright-report/
 test-results/
 snapshots/
@@ -8,3 +9,4 @@ snapshots/.broken*
 debug-test.html
 simple-test.html
 firebase-debug.log
+*.tmp.js

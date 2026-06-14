@@ -7,6 +7,10 @@ legacy interface.
 This app lives in the monorepo at `apps/web`. Shared docs are in
 `../../docs`, and Playwright e2e tests are in `../../tests/e2e`.
 
+Only production runtime assets should live in this folder. Historical pages,
+prototypes, and one-off debug scripts belong in `../../docs` or `../../tools`
+so static hosting stays clean.
+
 ## Local run
 
 ```bash

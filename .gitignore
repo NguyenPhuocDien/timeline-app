@@ -1,6 +1,9 @@
 .vercel
 logs/
 node_modules/
+tools/debug/*.tmp.js
+*.tmp.js
+firebase-debug.log
 playwright-report/
 test-results/
 .next/
@@ -11,6 +14,8 @@ test-results/
 **/test-results/
 **/snapshots/
 apps/web/.env.local
+apps/web/.firebase/
+apps/web/firebase-debug.log
 
 # Snapshots and temp files
 .backup-*/

@@ -59,10 +59,16 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       { id: 'seed-2026-10-20-phu-nu-viet-nam', title: 'Ngày Phụ nữ Việt Nam', type: 'solar', date: '2026-10-20', recurring: true, notes: '' }, { id: 'seed-2026-11-20-nha-giao', title: 'Ngày Nhà giáo Việt Nam', type: 'solar', date: '2026-11-20', recurring: true, notes: '' }, { id: 'seed-2026-12-25-giang-sinh', title: 'Giáng sinh', type: 'solar', date: '2026-12-25', recurring: true, notes: '' }, { id: 'seed-2027-02-01-ong-cong-ong-tao', title: 'Ông Công Ông Táo', type: 'lunar', date: '2027-02-01', recurring: true, notes: '23 tháng Chạp âm lịch, tham khảo' },
       { id: 'seed-2027-02-06-tet-nguyen-dan', title: 'Tết Nguyên Đán', type: 'lunar', date: '2027-02-06', recurring: true, notes: 'Mùng 1 Tết âm lịch, tham khảo' }
     ];
-    const SETTINGS_DEFAULTS = { theme: 'github-light', accent: 'blue', availableStart: '07:00', availableEnd: '22:00', dailyMissionLimit: 3, notifications: false, backgroundPreset: 'none', backgroundImage: '', backgroundName: '' };
+    const WORKSPACE_DEFAULTS = {
+      projects: [{ id: 'personal', name: 'Personal Ops', color: '#2563eb', status: 'active' }],
+      goals: []
+    };
+    const SETTINGS_DEFAULTS = { theme: 'github-light', accent: 'blue', availableStart: '07:00', availableEnd: '22:00', dailyMissionLimit: 3, notifications: false, backgroundPreset: 'none', backgroundImage: '', backgroundName: '', workspace: null };
     let currentTab = 'dashboard', selectedDate = fmtDate(new Date()), editingTaskId = null, detailTaskId = null, focusTimer = null, focusRemain = 0, focusTaskId = null, focusStartedAt = null, focusInitialSeconds = 0, focusEndAt = null;
-    let undoStack = [], pendingFocusReview = null, analyticsPreviewDate = fmtDate(new Date());
-    let taskFilters = { q: '', status: 'all', priority: 'all', tag: 'all', special: 'all' };
+    let undoStack = [], pendingFocusReview = null, analyticsPreviewDate = fmtDate(new Date()), dashboardMode = 'day', settingsSection = 'sync';
+    let taskFilters = { q: '', status: 'all', priority: 'all', tag: 'all', project: 'all', special: 'all' };
+    let lastNavRenderKey = '';
+    let lastRealtimeTick = 0;
     let db = load();
     window.currentTab = currentTab;
     window.currentUserId = null;
@@ -116,7 +122,45 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     function clamp(n, a, b) { return Math.max(a, Math.min(b, n)) }
     function pct(n) { return clamp(Math.round(n), 0, 100) }
     function esc(s) { return String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])) }
-    function toast(msg, action = null) { const t = $('#toast'); t.textContent = msg; if (action) { const b = document.createElement('button'); b.textContent = action.label; b.onclick = () => { if (typeof action.fn === 'function') action.fn(); else if (typeof action.fn === 'string' && window[action.fn.replace('()','')]) window[action.fn.replace('()','')](); }; t.appendChild(document.createTextNode(' ')); t.appendChild(b); } t.classList.add('show'); clearTimeout(toast._timer); toast._timer = setTimeout(() => t.classList.remove('show'), action ? 5200 : 2200) }
+    const iconPaths = {
+      dashboard: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
+      timeline: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+      tasks: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+      focus: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/>',
+      debt: '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+      calendar: '<path d="M8 2v4"/><path d="M16 2v4"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18"/>',
+      analytics: '<path d="M3 3v18h18"/><path d="M7 16v-5"/><path d="M12 16V7"/><path d="M17 16v-3"/>',
+      settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.52a2 2 0 0 1-1 1.72l-.15.1a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.52a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z"/><circle cx="12" cy="12" r="3"/>',
+      login: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>',
+      palette: '<path d="M12 22a10 10 0 1 1 0-20 10 10 0 0 1 10 10c0 1.7-1.3 3-3 3h-2.5a2.5 2.5 0 0 0 0 5H12z"/><circle cx="6.5" cy="11.5" r=".5" fill="currentColor"/><circle cx="9.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="14.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="11.5" r=".5" fill="currentColor"/>',
+      play: '<path d="m6 3 14 9-14 9V3z"/>',
+      pause: '<path d="M10 4H6v16h4V4z"/><path d="M18 4h-4v16h4V4z"/>',
+      check: '<path d="M20 6 9 17l-5-5"/>',
+      archive: '<path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/>',
+      plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+      alert: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+      x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'
+    };
+    function uiIcon(name, cls = 'icon') { return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name] || ''}</svg>` }
+    function toast(msg, action = null) {
+      const t = $('#toast');
+      if (!t) return;
+      const opts = action && typeof action === 'object' ? action : null;
+      const variant = opts?.variant;
+      t.className = 'toast';
+      if (['success', 'error', 'warn'].includes(variant)) t.classList.add(variant);
+      t.textContent = msg;
+      if (opts?.label) {
+        const b = document.createElement('button');
+        b.textContent = opts.label;
+        b.onclick = () => { if (typeof opts.fn === 'function') opts.fn(); else if (typeof opts.fn === 'string' && window[opts.fn.replace('()','')]) window[opts.fn.replace('()','')](); };
+        t.appendChild(document.createTextNode(' '));
+        t.appendChild(b);
+      }
+      t.classList.add('show');
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => t.classList.remove('show'), opts?.label ? 5200 : 2200);
+    }
     function cloneDb() { return JSON.parse(JSON.stringify(db)) }
     function getDbSnapshot() { return cloneDb() }
     function isSyncLoginReady() { return typeof window.firebaseLogin === 'function' }
@@ -153,7 +197,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       // index.html có 2 meta theme-color (media light/dark) — cập nhật cả hai
       document.querySelectorAll('meta[name="theme-color"]').forEach(m => { m.content = activeTheme().meta; });
       const btn = $('#themeBtn');
-      if (btn) btn.textContent = `Giao diện: ${activeTheme().name}`;
+      if (btn) btn.innerHTML = `${uiIcon('palette')}Giao diện: ${activeTheme().name}`;
     }
     function setTheme(id) { applyTheme(id); touchSettings(); save(); render(); toast(`Đã đổi sang ${activeTheme().name}`) }
     function cycleTheme() {
@@ -187,13 +231,104 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       const uploadCard = db.settings.backgroundImage ? `<button class="bgCard ${uploadActive ? 'active' : ''}" onclick="setBackgroundPreset('upload')"><div class="bgPreview" style="--bg-preview:url('${db.settings.backgroundImage}')"></div><div class="bgMeta"><div style="font-weight:700">Ảnh của bạn</div><small>${esc(db.settings.backgroundName || 'Ảnh tùy chỉnh')}</small></div></button>` : '';
       return `<div class="bgGrid">${BACKGROUND_PRESETS.map(bg => `<button class="bgCard ${bg.id === current ? 'active' : ''}" onclick="setBackgroundPreset('${bg.id}')"><div class="bgPreview" style="--bg-preview:${bg.preview}"></div><div class="bgMeta"><div style="font-weight:700">${bg.name}</div><small>${bg.note}</small></div></button>`).join('')}${uploadCard}</div>`;
     }
-    function defaultData() { return { tasks: [], events: seedEvents(), sessions: [], settings: { ...SETTINGS_DEFAULTS }, reviews: {} } }
+    function defaultWorkspace() { return JSON.parse(JSON.stringify(WORKSPACE_DEFAULTS)) }
+    // Bảng màu sticky kiểu macOS Stickies (pastel để chữ vẫn đọc rõ trên nền sáng/tối)
+    const STICKY_COLORS = ['#fff7cc', '#ffd9e0', '#cfe8ff', '#d6f5d6', '#e9d8fd', '#ffe3c2', '#e6eaf0'];
+    function normalizeWorkspace(raw = {}) {
+      const source = raw && typeof raw === 'object' ? raw : {};
+      const projects = (Array.isArray(source.projects) ? source.projects : [])
+        .map(p => ({
+          id: safeId(p?.id || uid()),
+          name: safeStr(p?.name).trim().slice(0, 80) || 'Project',
+          color: /^#[0-9a-f]{6}$/i.test(String(p?.color || '')) ? String(p.color) : '#2563eb',
+          status: p?.status === 'archived' ? 'archived' : 'active'
+        }))
+        .filter(p => p.status !== 'archived')
+        .slice(0, 24);
+      if (!projects.length) projects.push(...defaultWorkspace().projects);
+      const projectIds = new Set(projects.map(p => p.id));
+      const goals = (Array.isArray(source.goals) ? source.goals : [])
+        .map(g => ({
+          id: safeId(g?.id || uid()),
+          title: safeStr(g?.title).trim().slice(0, 120) || 'Goal',
+          projectId: projectIds.has(String(g?.projectId || '')) ? String(g.projectId) : projects[0].id,
+          targetDate: safeDate(g?.targetDate, ''),
+          confidence: ['on-track', 'at-risk', 'off-track'].includes(g?.confidence) ? g.confidence : 'on-track',
+          status: g?.status === 'archived' ? 'archived' : 'active',
+          createdAt: safeStr(g?.createdAt) || new Date().toISOString(),
+          updatedAt: safeStr(g?.updatedAt) || new Date().toISOString()
+        }))
+        .slice(0, 24);
+      const notes = (Array.isArray(source.notes) ? source.notes : [])
+        .map(n => ({
+          id: safeId(n?.id || uid()),
+          text: safeStr(n?.text).slice(0, 2000),
+          color: /^#[0-9a-f]{6}$/i.test(String(n?.color || '')) ? String(n.color) : STICKY_COLORS[0],
+          createdAt: safeStr(n?.createdAt) || new Date().toISOString(),
+          updatedAt: safeStr(n?.updatedAt) || new Date().toISOString()
+        }))
+        .slice(0, 50);
+      const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(String(source.birthDate || '')) ? source.birthDate : '';
+      return { projects, goals, notes, birthDate };
+    }
+    function workspace() {
+      db.settings.workspace = normalizeWorkspace(db.settings.workspace);
+      return db.settings.workspace;
+    }
+    function projectName(id) { return workspace().projects.find(p => p.id === id)?.name || 'Inbox' }
+    function projectColor(id) { return workspace().projects.find(p => p.id === id)?.color || '#94a3b8' }
+    // ── Sticky notes (Ghi chú nhanh) ──────────────────────────────────────────
+    function stickyNotes() { return workspace().notes; }
+    function addStickyNote() {
+      const ws = workspace();
+      const color = STICKY_COLORS[ws.notes.length % STICKY_COLORS.length];
+      ws.notes.unshift({ id: uid(), text: '', color, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      touchSettings(); save(); render();
+      // focus ngay vào note mới tạo
+      const ta = document.querySelector('.sticky .stickyText');
+      if (ta) ta.focus();
+    }
+    function updateStickyNote(id, text) {
+      const n = workspace().notes.find(x => x.id === id);
+      if (!n) return;
+      n.text = String(text).slice(0, 2000); n.updatedAt = new Date().toISOString();
+      touchSettings(); save(); // KHÔNG render: tránh huỷ textarea đang gõ → mất focus
+    }
+    function setStickyColor(id, color) {
+      const n = workspace().notes.find(x => x.id === id);
+      if (!n || !/^#[0-9a-f]{6}$/i.test(color)) return;
+      n.color = color; n.updatedAt = new Date().toISOString();
+      touchSettings(); save(); render();
+    }
+    function deleteStickyNote(id) {
+      const ws = workspace();
+      ws.notes = ws.notes.filter(x => x.id !== id);
+      touchSettings(); save(); render(); toast('Đã xóa ghi chú');
+    }
+    function renderStickyNotesHTML() {
+      const notes = stickyNotes();
+      return `<div class="card stickyWrap"><div class="stickyHead"><h3>Ghi chú nhanh</h3><button class="btn sm" onclick="addStickyNote()">${uiIcon('plus')}Thêm note</button></div>${notes.length ? `<div class="stickyGrid">${notes.map(stickyNoteHTML).join('')}</div>` : '<div class="muted small" style="padding:8px 2px">Chưa có ghi chú. Bấm “Thêm note” để tạo mẩu giấy nhớ.</div>'}</div>`;
+    }
+    function stickyNoteHTML(n) {
+      return `<div class="sticky" style="--sticky:${n.color}"><textarea class="stickyText" maxlength="2000" placeholder="Viết ghi chú..." oninput="updateStickyNote('${n.id}', this.value)">${esc(n.text)}</textarea><div class="stickyBar"><div class="stickyColors">${STICKY_COLORS.map(c => `<button class="stickyDot${c === n.color ? ' on' : ''}" style="background:${c}" title="Đổi màu" onclick="setStickyColor('${n.id}','${c}')"></button>`).join('')}</div><button class="stickyDel" title="Xóa" onclick="deleteStickyNote('${n.id}')">${uiIcon('x')}</button></div></div>`;
+    }
+    function goalName(id) { return workspace().goals.find(g => g.id === id && g.status !== 'archived')?.title || '' }
+    function projectOptionsHTML(selected = '') {
+      return workspace().projects.map(p => `<option value="${esc(p.id)}" ${selected === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+    }
+    function goalOptionsHTML(selected = '', projectId = '') {
+      const goals = workspace().goals.filter(g => g.status !== 'archived' && (!projectId || g.projectId === projectId));
+      return '<option value="">Khong gan goal</option>' + goals.map(g => `<option value="${esc(g.id)}" ${selected === g.id ? 'selected' : ''}>${esc(g.title)}</option>`).join('');
+    }
+    function defaultData() { return { tasks: [], events: seedEvents(), sessions: [], settings: { ...SETTINGS_DEFAULTS, workspace: defaultWorkspace() }, reviews: {} } }
     function coerceDbShape(source = {}) {
+      const settings = Object.assign({}, SETTINGS_DEFAULTS, source.settings || {});
+      settings.workspace = normalizeWorkspace(settings.workspace);
       return {
         tasks: Array.isArray(source.tasks) ? source.tasks : [],
         events: Array.isArray(source.events) ? source.events : [],
         sessions: Array.isArray(source.sessions) ? source.sessions : [],
-        settings: Object.assign({}, SETTINGS_DEFAULTS, source.settings || {}),
+        settings,
         reviews: source.reviews && typeof source.reviews === 'object' ? source.reviews : {}
       };
     }
@@ -383,6 +518,13 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       t.reason = safeStr(t.reason);
       t.stackType = safeStr(t.stackType);
       t.eventId = safeStr(t.eventId);
+      const ws = workspace();
+      const projectIds = new Set(ws.projects.map(p => p.id));
+      const goalIds = new Set(ws.goals.filter(g => g.status !== 'archived').map(g => g.id));
+      t.projectId = projectIds.has(String(t.projectId || '')) ? String(t.projectId) : ws.projects[0].id;
+      t.goalId = goalIds.has(String(t.goalId || '')) ? String(t.goalId) : '';
+      t.impact = ['high', 'medium', 'low'].includes(t.impact) ? t.impact : (t.mission ? 'high' : 'medium');
+      t.energy = ['deep', 'normal', 'light'].includes(t.energy) ? t.energy : 'normal';
       t.tags = (Array.isArray(t.tags) ? t.tags : []).map(safeStr).filter(Boolean).slice(0, 50);
       t.deferCount = Math.max(0, Math.round(Number(t.deferCount) || 0));
     }
@@ -410,7 +552,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       // Ảnh nền chỉ chấp nhận data URL base64 do app tự tạo (canvas.toDataURL)
       if (st.backgroundImage && !/^data:image\/[a-z+.-]+;base64,[A-Za-z0-9+/=]*$/i.test(st.backgroundImage)) st.backgroundImage = '';
     }
-    function normalize() { db.settings = Object.assign({ ...SETTINGS_DEFAULTS }, db.settings || {}); db.settings.theme = normalizeThemeId(db.settings.theme); sanitizeSettingsFields(db.settings); if (db.settings.backgroundPreset === 'upload' && !db.settings.backgroundImage) db.settings.backgroundPreset = 'none'; if (!Array.isArray(db.tasks)) db.tasks = []; if (!Array.isArray(db.events)) db.events = seedEvents(); if (!Array.isArray(db.sessions)) db.sessions = []; db.tasks.forEach(t => { sanitizeTaskFields(t); if (t.done && t.status !== 'done') t.status = 'done'; if (!t.status) t.status = t.done ? 'done' : 'todo'; if (!t.createdAt) t.createdAt = new Date().toISOString(); if (!t.updatedAt) t.updatedAt = t.createdAt; if (t.start && !t.end) t.end = deriveEndTime(t.start, t.duration); if (hasWrappedTimeRange(t.start, t.end)) { t.start = ''; t.end = ''; } ensureFlow(t); }); db.events.forEach(sanitizeEventFields); db.sessions.forEach(sanitizeSessionFields); autoStackOld(); }
+    function normalize() { db.settings = Object.assign({ ...SETTINGS_DEFAULTS, workspace: defaultWorkspace() }, db.settings || {}); db.settings.workspace = normalizeWorkspace(db.settings.workspace); db.settings.theme = normalizeThemeId(db.settings.theme); sanitizeSettingsFields(db.settings); if (db.settings.backgroundPreset === 'upload' && !db.settings.backgroundImage) db.settings.backgroundPreset = 'none'; if (!Array.isArray(db.tasks)) db.tasks = []; if (!Array.isArray(db.events)) db.events = seedEvents(); if (!Array.isArray(db.sessions)) db.sessions = []; db.tasks.forEach(t => { sanitizeTaskFields(t); if (t.done && t.status !== 'done') t.status = 'done'; if (!t.status) t.status = t.done ? 'done' : 'todo'; if (!t.createdAt) t.createdAt = new Date().toISOString(); if (!t.updatedAt) t.updatedAt = t.createdAt; if (t.start && !t.end) t.end = deriveEndTime(t.start, t.duration); if (hasWrappedTimeRange(t.start, t.end)) { t.start = ''; t.end = ''; } ensureFlow(t); }); db.events.forEach(sanitizeEventFields); db.sessions.forEach(sanitizeSessionFields); autoStackOld(); }
     function autoStackOld() {
       const today = fmtDate(new Date());
       localStorage.setItem('tl_last_opened_date', today);
@@ -436,6 +578,11 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     function remainingTodayMins() { const now = new Date(); return fmtDate(now) === selectedDate ? Math.max(0, 1440 - dayProgress()) : 1440 }
     function availableRemainMins(date = selectedDate) { const s = minOf(db.settings.availableStart) || 0, e = minOf(db.settings.availableEnd) || 1440; let rem = e - s; if (date === fmtDate(new Date())) rem = Math.max(0, e - dayProgress()); return rem }
     function durText(min) { min = Math.max(0, Math.round(min)); const d = Math.floor(min / 1440), h = Math.floor((min % 1440) / 60), m = min % 60; return (d ? d + ' ngày ' : '') + (h ? h + 'h ' : '') + (m || (!d && !h) ? m + 'm' : '') }
+    function isMobileViewport() { return window.matchMedia ? window.matchMedia('(max-width: 780px)').matches : window.innerWidth <= 780 }
+    function isInsightVisible() {
+      const el = $('#insight');
+      return !!el && getComputedStyle(el).display !== 'none';
+    }
     function init() {
       normalize();
       applyTheme(db.settings.theme);
@@ -449,30 +596,41 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       window.addEventListener('offline', updateNetworkStatus);
       if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (db.settings.theme === 'system') applyTheme('system') });
       setInterval(() => {
-        renderClock();
-        updateHomeClock();
-        renderInsightCounters();
-        if (currentTab === 'timeline') updateNowLine();
+        const now = Date.now();
+        const mobile = isMobileViewport();
+        const shouldRunLightTick = !mobile || now - lastRealtimeTick >= 10000;
+
+        if (shouldRunLightTick) {
+          lastRealtimeTick = now;
+          renderClock();
+          if (currentTab === 'dashboard') updateHomeClock();
+          if (isInsightVisible()) renderInsightCounters();
+          if (currentTab === 'timeline') updateNowLine();
+        }
+
         if (currentTab === 'focus') updateFocusRing();
       }, 1000);
 
       // Register SW
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker
-          .register('./sw.js?v=15', { updateViaCache: 'none' })
+          .register('./sw.js?v=19', { updateViaCache: 'none' })
           .catch(err => console.warn('[SW]', err));
       }
     }
-    const tabIcons = { dashboard: '🏠', timeline: '⏱', tasks: '✅', focus: '🎯', debt: '📦', calendar: '📅', analytics: '📊', settings: '⚙️' };
+    const tabIcons = { dashboard: 'dashboard', timeline: 'timeline', tasks: 'tasks', focus: 'focus', debt: 'debt', calendar: 'calendar', analytics: 'analytics', settings: 'settings' };
     const mobilePrimaryTabs = ['dashboard', 'timeline', 'tasks', 'focus'];
     function renderNav() {
-      const html = tabs.map(([id, name]) => `<button data-tab="${id}" class="${id === currentTab ? 'active' : ''}" aria-current="${id === currentTab ? 'page' : 'false'}" title="${name}"><span aria-hidden="true">${tabIcons[id] || ''}</span><span class="nav-label">${name}</span></button>`).join('');
+      const key = `${currentTab}|${isMobileViewport() ? 'm' : 'd'}`;
+      if (key === lastNavRenderKey) return;
+      lastNavRenderKey = key;
+      const html = tabs.map(([id, name]) => `<button data-tab="${id}" class="${id === currentTab ? 'active' : ''}" aria-current="${id === currentTab ? 'page' : 'false'}" title="${name}">${uiIcon(tabIcons[id])}<span class="nav-label">${name}</span></button>`).join('');
       $('#nav').innerHTML = html;
       const moreActive = !mobilePrimaryTabs.includes(currentTab);
       $('#mobileTabs').innerHTML = mobilePrimaryTabs.map(id => {
         const name = { dashboard: 'Hôm nay', timeline: 'Timeline', tasks: 'Tasks', focus: 'Tập trung' }[id];
-        return `<button data-tab="${id}" class="${id === currentTab ? 'active' : ''}">${tabIcons[id] || ''}<br>${name}</button>`;
-      }).join('') + `<button id="moreBtn" class="${moreActive ? 'active' : ''}">⋯<br>Thêm</button>`;
+        return `<button data-tab="${id}" class="${id === currentTab ? 'active' : ''}">${uiIcon(tabIcons[id])}<span>${name}</span></button>`;
+      }).join('') + `<button id="moreBtn" class="${moreActive ? 'active' : ''}"><span class="moreDots">...</span><span>Thêm</span></button>`;
       const moreBtn = $('#moreBtn');
       if (moreBtn) moreBtn.onclick = toggleMoreDrawer;
     }
@@ -553,7 +711,17 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         }
       });
     }
-    function render() { window.currentTab = currentTab; applyBackground(); renderNav(); renderClock(); $('#pageTitle').textContent = tabs.find(t => t[0] === currentTab)[1]; $$('.section').forEach(s => s.classList.toggle('active', s.id === currentTab)); $('#selectedDate').value = selectedDate; ({ dashboard: renderDashboard, timeline: () => renderTimeline(true), tasks: renderTasks, focus: renderFocus, debt: renderDebt, calendar: renderCalendar, analytics: renderAnalytics, settings: renderSettings }[currentTab])(); renderInsight() }
+    function render() {
+      window.currentTab = currentTab;
+      applyBackground();
+      renderNav();
+      renderClock();
+      $('#pageTitle').textContent = tabs.find(t => t[0] === currentTab)[1];
+      $$('.section').forEach(s => s.classList.toggle('active', s.id === currentTab));
+      $('#selectedDate').value = selectedDate;
+      ({ dashboard: renderDashboard, timeline: () => renderTimeline(true), tasks: renderTasks, focus: renderFocus, debt: renderDebt, calendar: renderCalendar, analytics: renderAnalytics, settings: renderSettings }[currentTab])();
+      if (isInsightVisible()) renderInsight();
+    }
     function renderClock() { const n = new Date(); $('#clock').textContent = `${vnDays[n.getDay()]}, ${n.toLocaleDateString('vi-VN')}` }
     function updateNetworkStatus() { const online = navigator.onLine; const el = $('#netStatus'); if (el) el.innerHTML = `<span class="statusPill"><span class="statusDot ${online ? '' : 'offline'}"></span>${online ? 'Online' : 'Offline'}</span>` }
     function renderHomeClock(next) {
@@ -570,11 +738,241 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       const pctEl = $('#homeClockPct'); if (pctEl) pctEl.textContent = `${pctDay}% ngày đã trôi`;
     }
     function stats(date = selectedDate) { const tasks = dayTasks(date), active = activeDayTasks(date), done = tasks.filter(t => t.status === 'done'), mission = active.filter(t => t.mission), need = incomplete(date).reduce((s, t) => s + Number(t.duration || 0), 0), blocked = active.filter(t => t.start && t.end).reduce((s, t) => s + (minOf(t.end) - minOf(t.start)), 0); const now = new Date(); const dayPct = date === fmtDate(now) ? dayProgress() / 1440 * 100 : (date < fmtDate(now) ? 100 : 0); return { tasks, active, done, mission, need, blocked, donePct: tasks.length ? done.length / tasks.length * 100 : 0, dayPct, remain: remainingTodayMins(), avail: availableRemainMins(date) } }
+    function periodRange(mode = dashboardMode, date = selectedDate) {
+      const base = parseDate(date);
+      const start = startOfDay(base);
+      if (mode === 'week') start.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+      if (mode === 'month') start.setDate(1);
+      const end = new Date(start);
+      if (mode === 'day') end.setDate(end.getDate() + 1);
+      if (mode === 'week') end.setDate(end.getDate() + 7);
+      if (mode === 'month') end.setMonth(end.getMonth() + 1);
+      return { start, end, startKey: fmtDate(start), endKey: fmtDate(new Date(end.getTime() - 86400000)) };
+    }
+    function periodTasks(mode = dashboardMode, date = selectedDate) {
+      const { start, end } = periodRange(mode, date);
+      return db.tasks.filter(t => !isDeletedItem(t) && parseDate(t.date) >= start && parseDate(t.date) < end);
+    }
+    function periodSnapshot(mode = dashboardMode, date = selectedDate) {
+      const range = periodRange(mode, date);
+      const tasks = periodTasks(mode, date);
+      const active = tasks.filter(t => t.status !== 'stack');
+      const done = tasks.filter(t => t.status === 'done');
+      const blocked = active.filter(taskHasBlocker);
+      const highImpactOpen = active.filter(t => t.impact === 'high' && t.status !== 'done');
+      const scheduled = active.filter(t => t.start && t.end).reduce((sum, t) => sum + Math.max(0, (minOf(t.end) || 0) - (minOf(t.start) || 0)), 0);
+      const need = active.filter(t => t.status !== 'done').reduce((sum, t) => sum + Number(t.duration || 0), 0);
+      const days = Math.max(1, Math.round((range.end - range.start) / 86400000));
+      const workDayMins = Math.max(0, (minOf(db.settings.availableEnd) || 1440) - (minOf(db.settings.availableStart) || 0));
+      const capacity = workDayMins * days;
+      const focus = db.sessions.filter(s => parseDate(s.date) >= range.start && parseDate(s.date) < range.end).reduce((sum, s) => sum + Number(s.minutes || 0), 0);
+      return { ...range, tasks, active, done, blocked, highImpactOpen, scheduled, need, capacity, focus, donePct: tasks.length ? done.length / tasks.length * 100 : 0 };
+    }
+    function setDashboardMode(mode) { dashboardMode = ['day', 'week', 'month'].includes(mode) ? mode : 'day'; renderDashboard(); }
+    function commandRisks(snap) {
+      const risks = [];
+      if (snap.need > snap.capacity) risks.push(`Quá tải ${durText(snap.need - snap.capacity)} so với capacity.`);
+      if (snap.blocked.length) risks.push(`${snap.blocked.length} task đang có blocker.`);
+      if (snap.highImpactOpen.length > 3) risks.push(`${snap.highImpactOpen.length} việc tác động cao chưa xong.`);
+      const oldDebt = stackTasks().filter(t => debtAge(t) >= 3);
+      if (oldDebt.length) risks.push(`${oldDebt.length} việc tồn trên 3 ngày cần triage.`);
+      if (!risks.length) risks.push('Không có cảnh báo lớn. Giữ lịch gọn và chốt việc quan trọng trước.');
+      return risks.slice(0, 4);
+    }
+    function goalProgress(goal) {
+      const linked = db.tasks.filter(t => !isDeletedItem(t) && t.goalId === goal.id);
+      const done = linked.filter(t => t.status === 'done').length;
+      return { linked, done, pct: linked.length ? Math.round(done / linked.length * 100) : 0 };
+    }
+    function projectProgress(project, mode = dashboardMode) {
+      const tasks = periodTasks(mode).filter(t => t.projectId === project.id);
+      const done = tasks.filter(t => t.status === 'done').length;
+      const open = tasks.filter(t => !['done', 'deleted'].includes(t.status)).length;
+      return { tasks, done, open, pct: tasks.length ? Math.round(done / tasks.length * 100) : 0 };
+    }
+    function statusSignal(snap) {
+      if (snap.blocked.length || snap.need > snap.capacity) return { label: 'At risk', cls: 'warn', text: 'Cần giảm tải hoặc xử lý blocker trước.' };
+      if (snap.donePct >= 70 || (snap.tasks.length && snap.need <= snap.capacity * 0.5)) return { label: 'On track', cls: 'ok', text: 'Nhịp đang ổn, tiếp tục chốt việc quan trọng.' };
+      return { label: 'In progress', cls: '', text: 'Có thể hoàn thành nếu ưu tiên đúng việc tiếp theo.' };
+    }
+    function nextActionTask() {
+      const nowMin = dayProgress();
+      const scheduled = activeDayTasks().filter(t => t.status !== 'done' && t.start && t.end && minOf(t.end) >= nowMin).sort((a, b) => minOf(a.start) - minOf(b.start));
+      if (scheduled[0]) return scheduled[0];
+      return incomplete().sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.priority] - { high: 0, medium: 1, low: 2 }[b.priority] || (b.impact === 'high') - (a.impact === 'high')))[0] || null;
+    }
+    function renderCockpitStrip() {
+      const snap = periodSnapshot('day');
+      const signal = statusSignal(snap);
+      const nowTask = activeDayTasks().find(t => t.start && t.end && minOf(t.start) <= dayProgress() && minOf(t.end) >= dayProgress() && t.status !== 'done');
+      const nextTask = nextActionTask();
+      const topRisk = commandRisks(snap)[0];
+      return `<div class="cockpitStrip">
+        <div class="cockpitCard status ${signal.cls}">
+          <span class="eyebrow">Today status</span>
+          <strong>${signal.label}</strong>
+          <p>${signal.text}</p>
+        </div>
+        <button class="cockpitCard" onclick="${nowTask ? `openTaskDetail('${nowTask.id}')` : `goTab('timeline')`}">
+          <span class="eyebrow">Now</span>
+          <strong>${nowTask ? esc(nowTask.title) : 'Mở timeline'}</strong>
+          <p>${nowTask ? `${nowTask.start}-${nowTask.end} · ${durText(nowTask.duration)}` : 'Chưa có block đang chạy. Xem timeline để chọn việc.'}</p>
+        </button>
+        <button class="cockpitCard" onclick="${nextTask ? `openTaskDetail('${nextTask.id}')` : `openTask()`}">
+          <span class="eyebrow">Next</span>
+          <strong>${nextTask ? esc(nextTask.title) : 'Tạo việc tiếp theo'}</strong>
+          <p>${nextTask ? `${projectName(nextTask.projectId)} · ${nextTask.impact || 'medium'} impact` : 'Chưa có task mở cho hôm nay.'}</p>
+        </button>
+        <button class="cockpitCard risk" onclick="goTab('debt')">
+          <span class="eyebrow">Risk</span>
+          <strong>${snap.blocked.length || stackTasks().length || snap.need > snap.capacity ? 'Cần chú ý' : 'Ổn định'}</strong>
+          <p>${esc(topRisk)}</p>
+        </button>
+      </div>`;
+    }
+    function renderCommandCenter() {
+      const snap = periodSnapshot();
+      const modeLabel = { day: 'Ngày', week: 'Tuần', month: 'Tháng' }[dashboardMode];
+      const risks = commandRisks(snap);
+      const projects = workspace().projects.map(p => ({ project: p, progress: projectProgress(p) })).filter(x => x.progress.tasks.length).slice(0, 4);
+      const goals = workspace().goals.filter(g => g.status !== 'archived').map(g => ({ goal: g, progress: goalProgress(g) })).slice(0, 4);
+      return `<div class="opsPanel">
+        <div class="opsHead">
+          <div>
+            <h2>Command Center</h2>
+            <div class="muted small">${modeLabel} ${snap.startKey}${snap.startKey !== snap.endKey ? ` → ${snap.endKey}` : ''}: tiến độ, tải việc và rủi ro chính.</div>
+          </div>
+          <div class="segmented">
+            ${['day', 'week', 'month'].map(m => `<button class="${dashboardMode === m ? 'active' : ''}" onclick="setDashboardMode('${m}')">${{ day: 'Ngày', week: 'Tuần', month: 'Tháng' }[m]}</button>`).join('')}
+          </div>
+        </div>
+        <div class="opsMetrics">
+          <div class="analyticsMiniStat"><span class="small muted">Hoàn thành</span><strong>${pct(snap.donePct)}%</strong><div class="trendBar"><i style="width:${pct(snap.donePct)}%"></i></div><div class="small muted">${snap.done.length}/${snap.tasks.length} task</div></div>
+          <div class="analyticsMiniStat"><span class="small muted">Tải việc còn lại</span><strong>${durText(snap.need)}</strong><div class="small muted">Capacity ${durText(snap.capacity)}</div></div>
+          <div class="analyticsMiniStat"><span class="small muted">Focus logged</span><strong>${durText(snap.focus)}</strong><div class="small muted">Scheduled ${durText(snap.scheduled)}</div></div>
+          <div class="analyticsMiniStat"><span class="small muted">Rủi ro</span><strong>${risks.length}</strong><div class="small muted">${snap.blocked.length} blocker</div></div>
+        </div>
+        <div class="opsGrid">
+          <div class="card"><h3>Rủi ro cần xử lý</h3><div class="riskList">${risks.map(r => `<div class="riskItem">${esc(r)}</div>`).join('')}</div></div>
+          <div class="card"><h3>Project trong kỳ</h3>${projects.length ? projects.map(({ project, progress }) => `<div class="progressRow"><div><b>${esc(project.name)}</b><div class="small muted">${progress.done}/${progress.tasks.length} done, ${progress.open} open</div></div><span class="metricBadge ${progress.pct >= 70 ? 'ok' : progress.pct < 35 ? 'warn' : ''}">${progress.pct}%</span></div>`).join('') : '<div class="muted">Chưa có task gắn project trong kỳ.</div>'}</div>
+          <div class="card"><h3>Goal cá nhân</h3>${goals.length ? goals.map(({ goal, progress }) => `<div class="progressRow"><div><b>${esc(goal.title)}</b><div class="small muted">${projectName(goal.projectId)}${goal.targetDate ? `, target ${goal.targetDate}` : ''}</div><div class="trendBar"><i style="width:${progress.pct}%"></i></div></div><span class="metricBadge ${goal.confidence === 'on-track' ? 'ok' : goal.confidence === 'off-track' ? 'warn' : ''}">${progress.pct}%</span></div>`).join('') : '<div class="muted">Chưa có goal. Tạo goal trong Settings để gắn task vào mục tiêu.</div>'}</div>
+        </div>
+      </div>`;
+    }
+    // ── Cảm hứng mỗi ngày: câu nói động lực + sự thật cung hoàng đạo ───────────
+    const QUOTES = [
+      { t: 'Cách duy nhất để làm việc lớn là yêu thích việc bạn làm.', a: 'Steve Jobs' },
+      { t: 'Thành công là đi từ thất bại này đến thất bại khác mà không mất nhiệt huyết.', a: 'Winston Churchill' },
+      { t: 'Tương lai thuộc về những người tin vào vẻ đẹp của giấc mơ mình.', a: 'Eleanor Roosevelt' },
+      { t: 'Đừng nhìn đồng hồ; hãy làm như nó. Cứ tiếp tục đi.', a: 'Sam Levenson' },
+      { t: 'Bí quyết để tiến lên là bắt đầu.', a: 'Mark Twain' },
+      { t: 'Hành trình vạn dặm bắt đầu từ một bước chân.', a: 'Lão Tử' },
+      { t: 'Bạn bỏ lỡ 100% những cú sút mà bạn không thực hiện.', a: 'Wayne Gretzky' },
+      { t: 'Hãy là sự thay đổi mà bạn muốn thấy ở thế giới.', a: 'Mahatma Gandhi' },
+      { t: 'Điều quan trọng không phải bạn ngã bao nhiêu lần, mà bạn đứng dậy bao nhiêu lần.', a: 'Vince Lombardi' },
+      { t: 'Chất lượng không phải là một hành động, đó là một thói quen.', a: 'Aristotle' },
+      { t: 'Người bi quan thấy khó khăn trong mọi cơ hội; người lạc quan thấy cơ hội trong mọi khó khăn.', a: 'Winston Churchill' },
+      { t: 'Nếu muốn đi nhanh hãy đi một mình, nếu muốn đi xa hãy đi cùng nhau.', a: 'Ngạn ngữ châu Phi' },
+      { t: 'Khó khăn chuẩn bị cho những con người bình thường một số phận phi thường.', a: 'C.S. Lewis' },
+      { t: 'Đừng sợ đi chậm, chỉ sợ dừng lại.', a: 'Ngạn ngữ Trung Hoa' },
+      { t: 'Kỷ luật là cầu nối giữa mục tiêu và thành tựu.', a: 'Jim Rohn' },
+      { t: 'Mọi chuyên gia đều từng là người mới bắt đầu.', a: 'Helen Hayes' },
+      { t: 'Cơ hội không tự gõ cửa, chính bạn tạo ra cánh cửa đó.', a: 'Milton Berle' },
+      { t: 'Thành công thường đến với những ai quá bận rộn để đi tìm nó.', a: 'Henry David Thoreau' },
+      { t: 'Giới hạn duy nhất cho ngày mai là những nghi ngờ của hôm nay.', a: 'Franklin D. Roosevelt' },
+      { t: 'Hãy làm những gì bạn có thể, với những gì bạn có, ở nơi bạn đang đứng.', a: 'Theodore Roosevelt' },
+      { t: 'Khả năng không cố định, nó được rèn luyện mỗi ngày.', a: 'Carol Dweck' },
+      { t: 'Không phải vì mọi thứ khó nên ta không dám, mà vì ta không dám nên mọi thứ mới khó.', a: 'Seneca' },
+      { t: 'Người chiến thắng không bao giờ bỏ cuộc, người bỏ cuộc không bao giờ chiến thắng.', a: 'Vince Lombardi' },
+      { t: 'Đầu tư vào bản thân là khoản đầu tư sinh lời cao nhất.', a: 'Warren Buffett' },
+      { t: 'Mỗi sáng bạn có hai lựa chọn: ngủ tiếp với giấc mơ, hoặc thức dậy và theo đuổi nó.', a: 'Khuyết danh' },
+      { t: 'Thái độ là điều nhỏ tạo nên khác biệt lớn.', a: 'Winston Churchill' },
+      { t: 'Đừng đếm những ngày, hãy làm cho những ngày trở nên đáng giá.', a: 'Muhammad Ali' },
+      { t: 'Điều bạn nghĩ, bạn sẽ trở thành.', a: 'Đức Phật' },
+      { t: 'Năng lượng và sự bền bỉ chinh phục mọi thứ.', a: 'Benjamin Franklin' },
+      { t: 'Thành công là tổng của những nỗ lực nhỏ được lặp lại mỗi ngày.', a: 'Robert Collier' },
+      { t: 'Cách tốt nhất để dự đoán tương lai là tạo ra nó.', a: 'Peter Drucker' },
+      { t: 'Hãy mơ lớn và dám thất bại.', a: 'Norman Vaughan' },
+      { t: 'Can đảm không phải là không sợ, mà là tiến lên dù đang sợ.', a: 'Khuyết danh' },
+      { t: 'Gieo thói quen gặt tính cách, gieo tính cách gặt số phận.', a: 'Khuyết danh' }
+    ];
+    const ZODIAC = [
+      { sign: 'Ma Kết', en: 'Capricorn', emoji: '♑', element: 'Đất' },
+      { sign: 'Bảo Bình', en: 'Aquarius', emoji: '♒', element: 'Khí' },
+      { sign: 'Song Ngư', en: 'Pisces', emoji: '♓', element: 'Nước' },
+      { sign: 'Bạch Dương', en: 'Aries', emoji: '♈', element: 'Lửa' },
+      { sign: 'Kim Ngưu', en: 'Taurus', emoji: '♉', element: 'Đất' },
+      { sign: 'Song Tử', en: 'Gemini', emoji: '♊', element: 'Khí' },
+      { sign: 'Cự Giải', en: 'Cancer', emoji: '♋', element: 'Nước' },
+      { sign: 'Sư Tử', en: 'Leo', emoji: '♌', element: 'Lửa' },
+      { sign: 'Xử Nữ', en: 'Virgo', emoji: '♍', element: 'Đất' },
+      { sign: 'Thiên Bình', en: 'Libra', emoji: '♎', element: 'Khí' },
+      { sign: 'Bọ Cạp', en: 'Scorpio', emoji: '♏', element: 'Nước' },
+      { sign: 'Nhân Mã', en: 'Sagittarius', emoji: '♐', element: 'Lửa' }
+    ];
+    const ZODIAC_FACTS = {
+      Capricorn: ['Ma Kết kỷ luật và kiên nhẫn bậc nhất hoàng đạo, luôn chơi đường dài.', 'Bạn xem thử thách là bậc thang chứ không phải rào cản.', 'Tham vọng thầm lặng nhưng bền bỉ là dấu ấn của bạn.', 'Bạn tin vào nỗ lực thực chất hơn may mắn nhất thời.', 'Một khi đã cam kết, Ma Kết hiếm khi bỏ cuộc giữa chừng.'],
+      Aquarius: ['Bảo Bình tư duy độc lập và thích những ý tưởng đi trước thời đại.', 'Bạn coi trọng tự do và sự khác biệt của mỗi cá nhân.', 'Khả năng nhìn bức tranh lớn giúp bạn giải bài toán theo cách mới.', 'Bạn dễ truyền cảm hứng cho tập thể bằng tầm nhìn.', 'Bảo Bình thường là người gieo mầm cho sự đổi mới.'],
+      Pisces: ['Song Ngư giàu trực giác và đồng cảm sâu sắc với người khác.', 'Trí tưởng tượng phong phú là nguồn sáng tạo vô tận của bạn.', 'Bạn cảm nhận được điều người khác chưa kịp nói ra.', 'Sự dịu dàng của bạn có sức chữa lành lớn.', 'Song Ngư thích nghi mềm mại như nước trước hoàn cảnh.'],
+      Aries: ['Bạch Dương là người tiên phong, dám bắt đầu khi người khác còn do dự.', 'Nhiệt huyết và năng lượng của bạn lan tỏa rất nhanh.', 'Bạn hành động trước, sợ hãi tính sau.', 'Tinh thần cạnh tranh lành mạnh thúc bạn tiến lên.', 'Bạch Dương phục hồi sau thất bại nhanh hơn hầu hết mọi người.'],
+      Taurus: ['Kim Ngưu bền bỉ và thực tế, xây mọi thứ để tồn tại lâu dài.', 'Bạn trân trọng giá trị và sự ổn định.', 'Một khi đã quyết, ý chí của bạn vững như đá.', 'Bạn biết tận hưởng thành quả mình tạo ra.', 'Kim Ngưu kiên định ngay cả khi tiến độ chậm.'],
+      Gemini: ['Song Tử linh hoạt, học nhanh và giao tiếp khéo léo.', 'Tò mò là động cơ khiến bạn không ngừng khám phá.', 'Bạn dễ kết nối nhiều thế giới và nhiều con người.', 'Khả năng thích nghi giúp bạn xoay chuyển tình thế nhanh.', 'Song Tử nhìn một vấn đề từ nhiều góc cùng lúc.'],
+      Cancer: ['Cự Giải tình cảm và che chở cho những người mình yêu thương.', 'Trực giác về cảm xúc của bạn rất nhạy bén.', 'Bạn xây dựng tổ ấm và sự an toàn cho tập thể.', 'Trí nhớ cảm xúc giúp bạn trân trọng từng kỷ niệm.', 'Cự Giải mạnh mẽ một cách âm thầm khi bảo vệ điều quan trọng.'],
+      Leo: ['Sư Tử tự tin và có khí chất lãnh đạo tự nhiên.', 'Sự hào phóng và ấm áp khiến bạn được yêu mến.', 'Bạn tỏa sáng nhất khi được làm điều mình tin tưởng.', 'Lòng kiêu hãnh lành mạnh thúc bạn giữ chuẩn mực cao.', 'Sư Tử truyền lửa cho người xung quanh dám mơ lớn.'],
+      Virgo: ['Xử Nữ tỉ mỉ, phân tích và hướng đến sự hoàn thiện.', 'Bạn nhìn ra chi tiết mà người khác bỏ sót.', 'Tinh thần phục vụ khiến bạn luôn muốn cải thiện mọi thứ.', 'Sự ngăn nắp giúp bạn biến hỗn loạn thành trật tự.', 'Xử Nữ thực tế nhưng giàu lòng tận tụy.'],
+      Libra: ['Thiên Bình tìm kiếm sự cân bằng và hài hòa trong mọi việc.', 'Bạn có khiếu thẩm mỹ và sự công bằng tự nhiên.', 'Khả năng nhìn cả hai phía giúp bạn hòa giải khéo léo.', 'Bạn coi trọng các mối quan hệ chất lượng.', 'Thiên Bình ra quyết định kỹ lưỡng để giữ lẽ phải.'],
+      Scorpio: ['Bọ Cạp mãnh liệt, quyết đoán và rất tập trung khi theo đuổi mục tiêu.', 'Ý chí và chiều sâu nội tâm là sức mạnh của bạn.', 'Bạn nhìn thấu bản chất ẩn sau bề mặt.', 'Lòng trung thành của bạn rất bền chặt.', 'Bọ Cạp tái sinh mạnh mẽ sau mỗi biến cố.'],
+      Sagittarius: ['Nhân Mã phiêu lưu, lạc quan và khát khao tự do khám phá.', 'Bạn luôn hướng tới chân trời và ý nghĩa lớn hơn.', 'Tinh thần cởi mở giúp bạn học từ mọi nền văn hóa.', 'Sự chân thành thẳng thắn là nét đáng quý của bạn.', 'Nhân Mã giữ niềm tin ngay cả khi đường còn dài.']
+    };
+    function zodiacFor(birthDate) {
+      const p = String(birthDate || '').split('-').map(Number);
+      const m = p[1], d = p[2];
+      if (!m || !d) return null;
+      const md = m * 100 + d;
+      if (md >= 1222 || md <= 119) return ZODIAC[0];
+      if (md <= 218) return ZODIAC[1];
+      if (md <= 320) return ZODIAC[2];
+      if (md <= 419) return ZODIAC[3];
+      if (md <= 520) return ZODIAC[4];
+      if (md <= 620) return ZODIAC[5];
+      if (md <= 722) return ZODIAC[6];
+      if (md <= 822) return ZODIAC[7];
+      if (md <= 922) return ZODIAC[8];
+      if (md <= 1022) return ZODIAC[9];
+      if (md <= 1121) return ZODIAC[10];
+      return ZODIAC[11];
+    }
+    function daySeed(dateStr) { const p = String(dateStr).split('-').map(Number); return (p[0] || 0) * 372 + (p[1] || 0) * 31 + (p[2] || 0); }
+    function pickDaily(arr, dateStr, salt = 0) { return arr.length ? arr[(daySeed(dateStr) + salt) % arr.length] : null; }
+    function renderInspirationHTML() {
+      const dateStr = fmtDate(new Date());
+      const bd = String(workspace().birthDate || '').trim();
+      const z = bd ? zodiacFor(bd) : null;
+      const quote = pickDaily(QUOTES, dateStr, 0);
+      const bp = bd.split('-').map(Number);
+      const isBirthday = z && bp[1] === (new Date().getMonth() + 1) && bp[2] === new Date().getDate();
+      let inner = '';
+      if (z) {
+        const fact = pickDaily(ZODIAC_FACTS[z.en] || [], dateStr, 7);
+        inner += `<div class="inspireZodiac"><div class="inspireZHead"><span class="zodiacGlyph">${z.emoji}</span><div><b>${z.sign}</b> <span class="muted small">(${z.en} · ${z.element})</span></div></div>${fact ? `<div class="inspireFact">${esc(fact)}</div>` : ''}</div>`;
+      }
+      if (quote) {
+        inner += `<blockquote class="inspireQuote">“${esc(quote.t)}”<cite>— ${esc(quote.a)}</cite></blockquote>`;
+      }
+      if (!bd) {
+        inner += `<div class="inspireHint">${uiIcon('alert')}Nhập ngày sinh ở Cài đặt → Workspace để mỗi ngày có thêm một sự thật về cung hoàng đạo của bạn.</div>`;
+      }
+      return `<div class="card inspireCard"><div class="inspireKicker">✨ Cảm hứng hôm nay${isBirthday ? ' · 🎂 Chúc mừng sinh nhật bạn!' : ''}</div>${inner}</div>`;
+    }
     function renderDashboard() {
-      const s = stats(); const week = weekStats(); const next = nextEvent(); const rec = recommendations(); $('#dashboard').innerHTML = `
+      const s = stats(); const week = weekStats(); const next = nextEvent(); const rec = recommendations(); const cockpit = renderCockpitStrip(); const commandCenter = renderCommandCenter(); $('#dashboard').innerHTML = `
+${renderInspirationHTML()}
 <div class="cmd"><div class="recommend"><h2 style="margin:0">Kế hoạch hôm nay</h2><div class="muted small">Nhìn nhanh việc cần làm và thời gian còn lại</div><ol>${rec.map(x => `<li>${x}</li>`).join('')}</ol><div class="row" style="margin-top:12px"><button class="btn sm" onclick="goTab('timeline')">Mở timeline</button><button class="btn sm secondary" onclick="openTask()">Thêm task</button><button class="btn sm secondary" onclick="openTriage()">Xử lý việc tồn</button></div></div>${renderHomeClock(next)}</div>
+${cockpit}
+${commandCenter}
 <div class="cards"><div class="card"><h3>Hôm nay còn</h3><div class="big">${durText(s.remain)}</div><div class="bar"><i style="width:${100 - pct(s.dayPct)}%"></i></div><div class="small muted">Thời gian đang trôi trong ngày</div></div><div class="card"><h3>Task hoàn thành</h3><div class="big">${pct(s.donePct)}%</div><div class="bar"><i style="width:${pct(s.donePct)}%"></i></div><div class="small muted">${s.done.length}/${s.tasks.length} task</div></div><div class="card"><h3>Tuần này còn</h3><div class="big">${durText(week.remain)}</div><div class="bar"><i style="width:${100 - pct(week.passed)}%"></i></div><div class="small muted">${week.done}/${week.total} task xong</div></div><div class="card"><h3>Việc tồn</h3><div class="big">${stackTasks().length}</div><div class="small muted">Tổng: ${durText(stackTasks().reduce((a, t) => a + Number(t.duration || 0), 0))}</div></div></div>
-<div class="split" style="margin-top:16px"><div>${renderTaskListHTML(activeDayTasks(), true)}</div><div class="card"><h3>Việc chính hôm nay</h3>${s.mission.length ? s.mission.map(t => taskMini(t)).join('') : '<div class="muted">Chưa chọn việc chính. Nên chọn tối đa 3 task quan trọng.</div>'}</div></div>`
+<div class="split" style="margin-top:16px"><div>${renderTaskListHTML(activeDayTasks(), true)}</div><div class="card"><h3>Việc chính hôm nay</h3>${s.mission.length ? s.mission.map(t => taskMini(t)).join('') : '<div class="muted">Chưa chọn việc chính. Nên chọn tối đa 3 task quan trọng.</div>'}</div></div>
+<div style="margin-top:16px">${renderStickyNotesHTML()}</div>`
       updateHomeClock();
     }
     function recommendations() { const s = stats(); const arr = []; if (!dayTasks().length) arr.push('Tạo 1-3 task quan trọng cho hôm nay, đừng lập kế hoạch quá tải.'); if (s.need > s.avail) arr.push(`Bạn đang thiếu khoảng <b>${durText(s.need - s.avail)}</b>. Hãy dời hoặc chia nhỏ task.`); if (s.dayPct > s.donePct + 25 && dayTasks().length) arr.push('Ngày đang trôi nhanh hơn tiến độ task. Nên bắt đầu task ưu tiên cao ngay.'); const debt = stackTasks().sort((a, b) => debtAge(b) - debtAge(a))[0]; if (debt) arr.push(`Xử lý việc tồn lâu nhất: <b>${esc(debt.title)}</b> đã ${debtAge(debt)} ngày.`); const next = nextEvent(); if (next) arr.push(`Sự kiện gần nhất là <b>${esc(next.title)}</b>. Gắn task chuẩn bị nếu cần.`); return arr.slice(0, 4) }
@@ -644,6 +1042,8 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         </div>`;
       }).join('');
       const uns = activeDayTasks().filter(t => !t.start || !t.end);
+      const scheduledMins = tasks.reduce((sum, t) => sum + Math.max(0, (minOf(t.end) || 0) - (minOf(t.start) || 0)), 0);
+      const freeMins = Math.max(0, availableRemainMins(selectedDate) - scheduledMins);
       $('#timeline').innerHTML = `
         <div class="quick">
           <input class="input" id="quickAdd" placeholder="Thêm nhanh: Ôn K-means 19:00 90m high #study">
@@ -652,10 +1052,12 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         </div>
         <div class="split">
           <div>
-            <div class="row">
-              <span class="pill">Trùng lịch: ${overlaps.size}</span>
-              <span class="pill">Block: ${tasks.length}</span>
+            <div class="timelineSummary">
               <span class="pill">Ngày: ${selectedDate}</span>
+              <span class="pill">Block: ${tasks.length}</span>
+              <span class="pill">Scheduled: ${durText(scheduledMins)}</span>
+              <span class="pill">Free: ${durText(freeMins)}</span>
+              <span class="pill ${overlaps.size ? 'dangerText' : ''}">Overlap: ${overlaps.size}</span>
             </div>
             <div class="timelineWrap" id="timelineWrap" onclick="timelineClick(event)">${hours}${line}${blocks}</div>
           </div>
@@ -704,7 +1106,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       return set;
     }
     function timelineClick(e) { const area = e.target.closest('.hourArea'); if (!area || e.target.closest('.tblock')) return; openTask(null, { date: selectedDate, start: timeOfMin(Number(area.dataset.hour) * 60), duration: 60 }) }
-    function taskText(t) { const f = ensureFlow(t); return [t.title, t.notes, ...(t.tags || []), f.summary, ...f.checklist.map(x => x.text), ...f.notes.map(x => x.text), ...f.blockers.map(x => x.text), ...f.nextActions.map(x => x.text)].join(' ').toLowerCase() }
+    function taskText(t) { const f = ensureFlow(t); return [t.title, t.notes, projectName(t.projectId), goalName(t.goalId), t.impact, t.energy, ...(t.tags || []), f.summary, ...f.checklist.map(x => x.text), ...f.notes.map(x => x.text), ...f.blockers.map(x => x.text), ...f.nextActions.map(x => x.text)].join(' ').toLowerCase() }
     function taskHasBlocker(t) { return ensureFlow(t).blockers.some(x => x.text && x.text.trim()) }
     function taskOverdue(t) { return t.date < fmtDate(new Date()) && !['done', 'deleted'].includes(t.status) }
     function filteredTasks(list) {
@@ -714,6 +1116,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         if (taskFilters.status !== 'all' && t.status !== taskFilters.status) return false;
         if (taskFilters.priority !== 'all' && t.priority !== taskFilters.priority) return false;
         if (taskFilters.tag !== 'all' && !(t.tags || []).includes(taskFilters.tag)) return false;
+        if (taskFilters.project !== 'all' && t.projectId !== taskFilters.project) return false;
         if (taskFilters.special === 'blocker' && !taskHasBlocker(t)) return false;
         if (taskFilters.special === 'overdue' && !taskOverdue(t)) return false;
         if (taskFilters.special === 'mission' && !t.mission) return false;
@@ -742,17 +1145,89 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         <select onchange="updateTaskFilter('status', this.value)"><option value="all">Mọi trạng thái</option>${['todo', 'doing', 'done', 'deferred', 'stack'].map(x => `<option value="${x}" ${taskFilters.status === x ? 'selected' : ''}>${x}</option>`).join('')}</select>
         <select onchange="updateTaskFilter('priority', this.value)"><option value="all">Mọi priority</option>${['high', 'medium', 'low'].map(x => `<option value="${x}" ${taskFilters.priority === x ? 'selected' : ''}>${x}</option>`).join('')}</select>
         <select onchange="updateTaskFilter('tag', this.value)"><option value="all">Mọi tag</option>${tags.map(x => `<option value="${esc(x)}" ${taskFilters.tag === x ? 'selected' : ''}>#${esc(x)}</option>`).join('')}</select>
+        <select onchange="updateTaskFilter('project', this.value)"><option value="all">Mọi project</option>${workspace().projects.map(p => `<option value="${esc(p.id)}" ${taskFilters.project === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
         <select onchange="updateTaskFilter('special', this.value)"><option value="all">Tất cả</option><option value="blocker" ${taskFilters.special === 'blocker' ? 'selected' : ''}>Có blocker</option><option value="overdue" ${taskFilters.special === 'overdue' ? 'selected' : ''}>Quá hạn</option><option value="mission" ${taskFilters.special === 'mission' ? 'selected' : ''}>Việc chính</option></select>
       </div>
       <div class="cards"><div class="card"><h3>Tổng task</h3><div class="big">${all.length}</div><div class="small muted" id="taskFilterCount">${list.length} đang hiển thị</div></div><div class="card"><h3>Done</h3><div class="big">${doneTasks().length}</div></div><div class="card"><h3>Cần làm</h3><div class="big">${durText(incomplete().reduce((a, t) => a + Number(t.duration || 0), 0))}</div></div><div class="card"><h3>Việc chính</h3><div class="big">${all.filter(t => t.mission).length}</div></div></div><div id="taskListMount" style="margin-top:16px">${renderTaskListHTML(list, true)}</div>`
     }
     function renderTaskListHTML(list, actions = false) {
-      if (!list.length) return `<div class="emptyState"><svg width="64" height="64" viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="30" stroke="currentColor" stroke-width="2"/><path d="M22 32l7 7 13-13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><h3>Chưa có task nào</h3><p>Hãy tạo task mới bằng nút <b>+ Task</b> hoặc nhấn phím <kbd class="kbd">N</kbd></p><button class="btn" onclick="openTask()">+ Tạo task ngay</button></div>`;
-      return `<div class="list">${list.map(t => `<div class="task"><div class="taskTop"><div><div class="taskTitle">${esc(t.title)}</div><div class="muted small">${t.date} ${t.start ? `· ${t.start}-${t.end}` : ''} · ${t.duration}m ${t.deadline ? `· deadline ${t.deadline}` : ''}</div></div><span class="badge ${t.priority}">${t.priority}</span></div><div class="row"><span class="badge">${t.status}</span>${t.mission ? '<span class="badge">⭐ Việc chính</span>' : ''}${(t.tags || []).map(x => `<span class="badge">#${esc(x)}</span>`).join('')}</div>${actions ? `<div class="row"><button class="btn sm" onclick="openTaskDetail('${t.id}')">Mở</button><button class="btn sm ok" onclick="markDone('${t.id}')">Done</button><button class="btn sm secondary" onclick="startFocus('${t.id}')">🎯 Tập trung</button><button class="btn sm secondary" onclick="openTask('${t.id}')">Sửa</button><button class="btn sm warn" onclick="moveToStack('${t.id}')">📦 Tồn</button></div>` : ''}</div>`).join('')}</div>`;
+      if (!list.length) return `<div class="emptyState">${uiIcon('tasks', 'icon lg')}<h3>Chưa có task nào</h3><p>Bắt đầu bằng 1-3 việc chính, hoặc tạo một block deep work cho hôm nay.</p><div class="row"><button class="btn" onclick="openTask()">${uiIcon('plus')}Tạo công việc</button><button class="btn secondary" onclick="goTab('timeline')">Mở timeline</button></div></div>`;
+      return `<div class="list">${list.map(t => {
+        const goal = goalName(t.goalId);
+        const stateClass = `${t.impact === 'high' ? 'impact-high' : ''} ${taskHasBlocker(t) ? 'has-blocker' : ''} ${taskOverdue(t) ? 'is-overdue' : ''} ${t.status === 'done' ? 'is-done' : ''}`;
+        return `<div class="task ${stateClass}" style="--task-accent:${projectColor(t.projectId)}"><div class="taskTop"><div><div class="taskTitle">${esc(t.title)}</div><div class="muted small taskMeta"><span class="dateChip">${uiIcon('calendar')}${t.date}</span>${t.start ? `<span>${t.start}-${t.end}</span>` : ''}<span>${t.duration}m</span>${t.deadline ? `<span class="deadlineChip">deadline ${t.deadline}</span>` : ''}</div></div><span class="badge ${t.priority}">${t.priority}</span></div><div class="row"><span class="badge">${t.status}</span><span class="badge">${esc(projectName(t.projectId))}</span>${goal ? `<span class="badge">${esc(goal)}</span>` : ''}<span class="badge">${t.impact || 'medium'} impact</span><span class="badge">${t.energy || 'normal'}</span>${taskHasBlocker(t) ? '<span class="badge warn">blocked</span>' : ''}${t.mission ? '<span class="badge">Việc chính</span>' : ''}${(t.tags || []).map(x => `<span class="badge">#${esc(x)}</span>`).join('')}</div>${actions ? `<div class="row taskActions"><button class="btn sm" onclick="openTaskDetail('${t.id}')">Mở</button><button class="btn sm ok" onclick="markDone('${t.id}')">${uiIcon('check')}Done</button><button class="btn sm secondary" onclick="startFocus('${t.id}')">${uiIcon('focus')}Tập trung</button><button class="btn sm secondary" onclick="openTask('${t.id}')">Sửa</button><button class="btn sm warn" onclick="moveToStack('${t.id}')">${uiIcon('archive')}Tồn</button></div>` : ''}<div class="taskAccentBar" title="${esc(projectName(t.projectId))}"></div></div>`;
+      }).join('')}</div>`;
     }
     function taskMini(t) { return `<div class="task"><div class="taskTitle">${esc(t.title)}</div><div class="muted small">${t.start ? `${t.start}-${t.end} · ` : ''}${t.duration}m · ${t.status}</div><div class="row"><button class="btn sm" onclick="openTaskDetail('${t.id}')">Mở</button><button class="btn sm ok" onclick="markDone('${t.id}')">Done</button></div></div>` }
-    function openTask(id = null, preset = {}) { editingTaskId = id; const t = id ? db.tasks.find(x => x.id === id) : { title: '', date: selectedDate, duration: 60, priority: 'high', status: 'todo', mission: false, done: false, flow: defaultFlow(), ...preset }; if (!t) return; const endValue = t.end || deriveEndTime(t.start, t.duration); $('#taskModalTitle').textContent = id ? 'Sửa task' : 'Thêm task'; $('#fTitle').value = t.title || ''; $('#fDate').value = t.date || selectedDate; $('#fDuration').value = t.duration || 60; $('#fPriority').value = t.priority || 'medium'; $('#fStart').value = t.start || ''; $('#fEnd').value = endValue; $('#fDeadline').value = t.deadline || ''; $('#fStatus').value = t.status || 'todo'; $('#fTags').value = (t.tags || []).map(x => '#' + x).join(' '); $('#fNotes').value = t.notes || ''; $('#fMission').checked = !!t.mission; $('#fDone').checked = t.status === 'done'; $('#deleteTaskBtn').style.display = id ? 'inline-flex' : 'none'; $('#fEvent').innerHTML = '<option value="">Không liên kết</option>' + db.events.map(e => `<option value="${e.id}">${esc(e.title)}</option>`).join(''); $('#fEvent').value = t.eventId || ''; openModal('taskModal') }
-    function saveTask() { const id = editingTaskId; let t = id ? db.tasks.find(x => x.id === id) : { id: uid(), createdAt: new Date().toISOString(), deferCount: 0, flow: defaultFlow() }; if (!t) return; const taskDate = $('#fDate').value; const durationValue = Number($('#fDuration').value) || 0; const startValue = $('#fStart').value; const endValue = $('#fEnd').value || deriveEndTime(startValue, durationValue); if (!taskDate) { toast('Vui lòng chọn ngày cho task.'); return } if (durationValue <= 0) { toast('Duration phải lớn hơn 0 phút.'); return } const missionCount = activeDayTasks(taskDate).filter(x => x.mission && x.id !== id).length; if ($('#fMission').checked && missionCount >= Number(db.settings.dailyMissionLimit || 3)) { toast('Việc chính hôm nay chỉ nên tối đa 3 task.'); return } if (startValue && hasWrappedTimeRange(startValue, endValue)) { toast('Task vượt qua 00:00 chưa được hỗ trợ. Hãy tách task thành 2 phần.'); return } ensureFlow(t); touchTask(t, { title: $('#fTitle').value.trim() || 'Untitled task', date: taskDate, duration: durationValue, priority: $('#fPriority').value, start: startValue, end: endValue, deadline: $('#fDeadline').value, status: $('#fDone').checked ? 'done' : $('#fStatus').value, mission: $('#fMission').checked, notes: $('#fNotes').value, tags: $('#fTags').value.split(/\s+/).filter(Boolean).map(x => x.replace(/^#/, '')).filter(Boolean), eventId: $('#fEvent').value || '' }); if (t.status === 'done') t.doneAt = new Date().toISOString(); if (!id) db.tasks.push(t); save(); closeModal('taskModal'); render(); if (detailTaskId === t.id) renderTaskDetail(t.id); toast('Đã lưu task') }
+    function openTask(id = null, preset = {}) {
+      editingTaskId = id;
+      const t = id ? db.tasks.find(x => x.id === id) : { title: '', date: selectedDate, duration: 60, priority: 'high', impact: 'medium', energy: 'normal', projectId: workspace().projects[0].id, goalId: '', status: 'todo', mission: false, done: false, flow: defaultFlow(), ...preset };
+      if (!t) return;
+      const endValue = t.end || deriveEndTime(t.start, t.duration);
+      const projectValue = t.projectId || workspace().projects[0].id;
+      $('#taskModalTitle').textContent = id ? 'Sửa task' : 'Thêm task';
+      $('#fTitle').value = t.title || '';
+      $('#fDate').value = t.date || selectedDate;
+      $('#fDuration').value = t.duration || 60;
+      $('#fPriority').value = t.priority || 'medium';
+      $('#fProject').innerHTML = projectOptionsHTML(projectValue);
+      $('#fProject').onchange = e => { $('#fGoal').innerHTML = goalOptionsHTML('', e.target.value); };
+      $('#fGoal').innerHTML = goalOptionsHTML(t.goalId || '', projectValue);
+      $('#fImpact').value = t.impact || (t.mission ? 'high' : 'medium');
+      $('#fEnergy').value = t.energy || 'normal';
+      $('#fStart').value = t.start || '';
+      $('#fEnd').value = endValue;
+      $('#fDeadline').value = t.deadline || '';
+      $('#fStatus').value = t.status || 'todo';
+      $('#fTags').value = (t.tags || []).map(x => '#' + x).join(' ');
+      $('#fNotes').value = t.notes || '';
+      $('#fMission').checked = !!t.mission;
+      $('#fDone').checked = t.status === 'done';
+      $('#deleteTaskBtn').style.display = id ? 'inline-flex' : 'none';
+      $('#fEvent').innerHTML = '<option value="">Không liên kết</option>' + db.events.map(e => `<option value="${e.id}">${esc(e.title)}</option>`).join('');
+      $('#fEvent').value = t.eventId || '';
+      openModal('taskModal');
+    }
+    function saveTask() {
+      const id = editingTaskId;
+      let t = id ? db.tasks.find(x => x.id === id) : { id: uid(), createdAt: new Date().toISOString(), deferCount: 0, flow: defaultFlow() };
+      if (!t) return;
+      const taskDate = $('#fDate').value;
+      const durationValue = Number($('#fDuration').value) || 0;
+      const startValue = $('#fStart').value;
+      const endValue = $('#fEnd').value || deriveEndTime(startValue, durationValue);
+      if (!taskDate) { toast('Vui lòng chọn ngày cho task.'); return }
+      if (durationValue <= 0) { toast('Duration phải lớn hơn 0 phút.'); return }
+      const missionCount = activeDayTasks(taskDate).filter(x => x.mission && x.id !== id).length;
+      if ($('#fMission').checked && missionCount >= Number(db.settings.dailyMissionLimit || 3)) { toast('Việc chính hôm nay chỉ nên tối đa 3 task.'); return }
+      if (startValue && hasWrappedTimeRange(startValue, endValue)) { toast('Task vượt qua 00:00 chưa được hỗ trợ. Hãy tách task thành 2 phần.'); return }
+      ensureFlow(t);
+      touchTask(t, {
+        title: $('#fTitle').value.trim() || 'Untitled task',
+        date: taskDate,
+        duration: durationValue,
+        priority: $('#fPriority').value,
+        projectId: $('#fProject').value || workspace().projects[0].id,
+        goalId: $('#fGoal').value || '',
+        impact: $('#fImpact').value || 'medium',
+        energy: $('#fEnergy').value || 'normal',
+        start: startValue,
+        end: endValue,
+        deadline: $('#fDeadline').value,
+        status: $('#fDone').checked ? 'done' : $('#fStatus').value,
+        mission: $('#fMission').checked,
+        notes: $('#fNotes').value,
+        tags: $('#fTags').value.split(/\s+/).filter(Boolean).map(x => x.replace(/^#/, '')).filter(Boolean),
+        eventId: $('#fEvent').value || ''
+      });
+      if (t.status === 'done') t.doneAt = new Date().toISOString();
+      if (!id) db.tasks.push(t);
+      save();
+      closeModal('taskModal');
+      render();
+      if (detailTaskId === t.id) renderTaskDetail(t.id);
+      toast('Đã lưu task');
+    }
     function softDeleteTask(id) {
       const task = db.tasks.find(t => t.id === id);
       if (!task) return false;
@@ -779,6 +1254,10 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
               <span class="badge ${t.priority}">${t.priority}</span>
               <span class="badge">${t.status}</span>
               <span class="badge">${t.date}${t.start ? ` · ${t.start}-${t.end}` : ''}</span>
+              <span class="badge">${esc(projectName(t.projectId))}</span>
+              ${goalName(t.goalId) ? `<span class="badge">${esc(goalName(t.goalId))}</span>` : ''}
+              <span class="badge">${t.impact || 'medium'} impact</span>
+              <span class="badge">${t.energy || 'normal'}</span>
               ${t.mission ? '<span class="badge">Việc chính</span>' : ''}
             </div>
           </div>
@@ -844,6 +1323,10 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         duration: dur, priority, start: time,
         end: time ? timeOfMin(minOf(time) + dur) : '',
         deadline: '', status: 'todo', mission, notes: '', tags,
+        projectId: workspace().projects[0].id,
+        goalId: '',
+        impact: mission || priority === 'high' ? 'high' : 'medium',
+        energy: dur >= 90 ? 'deep' : 'normal',
         flow: defaultFlow(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), deferCount: 0
       };
       db.tasks.push(t); el.value = ''; save(); render(); toast('✅ Đã thêm: ' + titleStr);
@@ -854,29 +1337,85 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     function renderFocus() {
       const tasks = activeDayTasks().filter(t => t.status !== 'done');
       const focusPct = focusInitialSeconds > 0 ? pct((focusInitialSeconds - Math.max(0, focusRemain)) / focusInitialSeconds * 100) : 0;
-      const taskName = focusTaskId ? esc(db.tasks.find(t => t.id === focusTaskId)?.title || 'Task') : 'Chưa chọn task';
+      const activeTask = focusTaskId ? db.tasks.find(t => t.id === focusTaskId) : null;
+      const taskName = activeTask ? esc(activeTask.title || 'Task') : 'Chưa chọn task';
+      const focusState = focusTimer ? 'Đang chạy' : (focusTaskId ? 'Đang pause' : 'Sẵn sàng');
+      const focusLabel = focusTimer ? 'Đang tập trung' : (focusTaskId ? 'Đã pause' : 'Chọn task');
+      const todayFocus = db.sessions.filter(s => s.date === selectedDate).reduce((sum, s) => sum + Number(s.minutes || 0), 0);
+      const plannedMins = tasks.reduce((sum, t) => sum + Number(t.duration || 0), 0);
+      const deepCount = tasks.filter(t => t.energy === 'deep' || t.impact === 'high' || t.mission).length;
       $('#focus').innerHTML = `
-        <div class="card" style="max-width:360px;margin:0 auto 20px">
-          <div class="focusRing" id="focusRingEl">
-            <div class="focusRingCenter">
-              <div class="focusRingTime" id="focusRemain">${formatFocusTime(focusRemain)}</div>
-              <div class="focusRingLabel">${focusTimer ? '▶ Đang tập trung' : (focusTaskId ? '⏸ Đã pause' : '⏱ Chọn task')}</div>
+        <div class="focusShell">
+          <section class="focusConsole card">
+            <div class="focusPanelHead">
+              <div>
+                <div class="eyebrow">Focus console</div>
+                <h2>${focusState}</h2>
+              </div>
+              <span class="metricBadge ${focusTimer ? 'ok' : focusTaskId ? '' : 'warn'}">${focusLabel}</span>
+            </div>
+            <div class="focusTimerStage">
+              <div class="focusRing" id="focusRingEl">
+                <div class="focusRingCenter">
+                  <div class="focusRingTime" id="focusRemain">${formatFocusTime(focusRemain)}</div>
+                  <div class="focusRingLabel">${focusLabel}</div>
+                </div>
+              </div>
+              <div class="focusActiveTask">
+                <span class="small muted">Task hiện tại</span>
+                <strong>${taskName}</strong>
+                <span class="small muted">${activeTask ? `${esc(projectName(activeTask.projectId))} · ${activeTask.duration || 0}m · ${activeTask.priority}` : 'Chọn một task trong danh sách bên dưới để bắt đầu.'}</span>
+              </div>
+            </div>
+            <div class="focusQuickPresets" aria-label="Focus presets">
+              <button class="btn sm" onclick="setFocusPreset(25)">25m</button>
+              <button class="btn sm" onclick="setFocusPreset(50)">50m</button>
+              <button class="btn sm" onclick="setFocusPreset(90)">90m</button>
+            </div>
+            <div class="focusControlGrid">
+              <button class="btn" onclick="toggleFocusTimer()">${focusTimer ? 'Pause' : 'Resume'}</button>
+              <button class="btn ok" onclick="completeFocus()">Kết thúc</button>
+              <button class="btn secondary" onclick="addFocus(10)">+10m</button>
+            </div>
+          </section>
+          <aside class="focusSidePanel">
+            <div class="focusStatsGrid">
+              <div class="focusStat">
+                <span>Focus hôm nay</span>
+                <strong>${durText(todayFocus)}</strong>
+              </div>
+              <div class="focusStat">
+                <span>Task mở</span>
+                <strong>${tasks.length}</strong>
+              </div>
+              <div class="focusStat">
+                <span>Deep work</span>
+                <strong>${deepCount}</strong>
+              </div>
+              <div class="focusStat">
+                <span>Khối lượng</span>
+                <strong>${durText(plannedMins)}</strong>
+              </div>
+            </div>
+            <div class="focusTip card">
+              <div class="eyebrow">Gợi ý nhịp làm</div>
+              <p>${focusTaskId ? 'Giữ màn hình này ít nhiễu: chỉ pause, cộng thời gian hoặc kết thúc phiên khi cần review.' : 'Chọn 1 việc có tác động cao, chạy 25 phút trước, rồi mới quyết định có kéo dài phiên hay không.'}</p>
+            </div>
+          </aside>
+        </div>
+        <div class="focusTaskPanel">
+          <div class="sectionHead">
+            <div>
+              <div class="eyebrow">Focus queue</div>
+              <h2>Chọn task để tập trung</h2>
+            </div>
+            <div class="row">
+              <button class="btn secondary" onclick="goTab('timeline')">Mở timeline</button>
+              <button class="btn" onclick="openTask()">Tạo công việc</button>
             </div>
           </div>
-          <div class="muted small" style="text-align:center;margin-bottom:12px">${taskName}</div>
-          <div class="row" style="justify-content:center;margin-bottom:12px">
-            <button class="btn sm" onclick="setFocusPreset(25)">25m</button>
-            <button class="btn sm" onclick="setFocusPreset(50)">50m</button>
-            <button class="btn sm" onclick="setFocusPreset(90)">90m</button>
-          </div>
-          <div class="row" style="justify-content:center">
-            <button class="btn" onclick="toggleFocusTimer()">${focusTimer ? '⏸ Pause' : '▶ Resume'}</button>
-            <button class="btn ok" onclick="completeFocus()">✅ Kết thúc</button>
-            <button class="btn secondary" onclick="addFocus(10)">+10m</button>
-          </div>
-        </div>
-        <h2 style="margin-bottom:12px">🎯 Chọn task để tập trung</h2>
-        ${renderTaskListHTML(tasks, true)}`;
+          ${renderTaskListHTML(tasks, true)}
+        </div>`;
       updateFocusRing();
     }
     function formatFocusTime(sec) {
@@ -1121,6 +1660,67 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       if (preview.done >= 70) html += '<p class="okText">Ngày này đang là mẫu tốt. Có thể copy nhịp làm việc sang các ngày tiếp theo.</p>';
       return html;
     }
+    function workspaceSettingsHTML() {
+      const ws = workspace();
+      const activeGoals = ws.goals.filter(g => g.status !== 'archived');
+      return `<div class="workspaceSettings">
+        <div class="workspaceColumn">
+          <h3>Project cá nhân</h3>
+          <div class="appearanceNote">Dùng project để gom việc theo ngữ cảnh: học tập, sản phẩm, khách hàng, sức khỏe.</div>
+          <div class="workspaceForm"><input class="input" id="newProjectName" placeholder="Ví dụ: Launch website"><button class="btn secondary" onclick="addWorkspaceProject()">Thêm project</button></div>
+          <div class="chipList">${ws.projects.map(p => `<span class="badge">${esc(p.name)}</span>`).join('')}</div>
+        </div>
+        <div class="workspaceColumn">
+          <h3>Goal lite</h3>
+          <div class="appearanceNote">Goal là mục tiêu có task liên kết. Progress tự tính theo task đã done.</div>
+          <div class="workspaceGoalForm">
+            <input class="input" id="newGoalTitle" placeholder="Ví dụ: Hoàn thành MVP workspace">
+            <select id="newGoalProject">${projectOptionsHTML()}</select>
+            <input class="input" id="newGoalTarget" type="date">
+            <button class="btn secondary" onclick="addWorkspaceGoal()">Thêm goal</button>
+          </div>
+          <div class="goalList">${activeGoals.length ? activeGoals.map(g => {
+            const progress = goalProgress(g);
+            return `<div class="goalRow"><div><b>${esc(g.title)}</b><div class="small muted">${esc(projectName(g.projectId))}${g.targetDate ? ` · target ${g.targetDate}` : ''}</div><div class="trendBar"><i style="width:${progress.pct}%"></i></div></div><div class="goalActions"><select onchange="setGoalConfidence('${g.id}', this.value)"><option value="on-track" ${g.confidence === 'on-track' ? 'selected' : ''}>On track</option><option value="at-risk" ${g.confidence === 'at-risk' ? 'selected' : ''}>At risk</option><option value="off-track" ${g.confidence === 'off-track' ? 'selected' : ''}>Off track</option></select><button class="btn sm ghost" onclick="archiveWorkspaceGoal('${g.id}')">Archive</button></div></div>`;
+          }).join('') : '<div class="muted">Chưa có goal cá nhân.</div>'}</div>
+        </div>
+      </div>`;
+    }
+    function addWorkspaceProject() {
+      const input = $('#newProjectName');
+      const name = input?.value.trim();
+      if (!name) return toast('Nhập tên project trước.');
+      const ws = workspace();
+      ws.projects.push({ id: uid(), name: name.slice(0, 80), color: '#2563eb', status: 'active' });
+      touchSettings(); save(); renderSettings(); toast('Đã thêm project');
+    }
+    function addWorkspaceGoal() {
+      const title = $('#newGoalTitle')?.value.trim();
+      if (!title) return toast('Nhập tên goal trước.');
+      const ws = workspace();
+      ws.goals.push({ id: uid(), title: title.slice(0, 120), projectId: $('#newGoalProject')?.value || ws.projects[0].id, targetDate: safeDate($('#newGoalTarget')?.value, ''), confidence: 'on-track', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      touchSettings(); save(); renderSettings(); toast('Đã thêm goal');
+    }
+    function setGoalConfidence(id, value) {
+      const goal = workspace().goals.find(g => g.id === id);
+      if (!goal) return;
+      goal.confidence = ['on-track', 'at-risk', 'off-track'].includes(value) ? value : 'on-track';
+      goal.updatedAt = new Date().toISOString();
+      touchSettings(); save(); render(); toast('Đã cập nhật confidence');
+    }
+    function archiveWorkspaceGoal(id) {
+      const goal = workspace().goals.find(g => g.id === id);
+      if (!goal) return;
+      goal.status = 'archived';
+      goal.updatedAt = new Date().toISOString();
+      db.tasks.forEach(t => { if (t.goalId === id) touchTask(t, { goalId: '' }); });
+      touchSettings(); save(); renderSettings(); toast('Đã archive goal');
+    }
+    function setSettingsSection(id) { settingsSection = ['workspace', 'sync', 'appearance', 'data'].includes(id) ? id : 'workspace'; renderSettings(); }
+    function settingsTabsHTML() {
+      const labels = { workspace: 'Workspace', sync: 'Sync', appearance: 'Appearance', data: 'Data' };
+      return `<div class="settingsTabs">${Object.keys(labels).map(id => `<button class="${settingsSection === id ? 'active' : ''}" onclick="setSettingsSection('${id}')">${labels[id]}</button>`).join('')}</div>`;
+    }
     function renderSettings() {
       const syncInfo = typeof window.getSyncStatus === 'function' ? window.getSyncStatus() : { status: isSyncLoginReady() ? 'signed-out' : 'loading' };
       const syncLabels = { synced: 'Đã đồng bộ', syncing: 'Đang đồng bộ', offline: 'Offline', error: 'Lỗi đồng bộ', 'signed-out': 'Chưa đăng nhập', loading: 'Đang tải Firebase' };
@@ -1130,11 +1730,15 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
 
       const conflictCount = window._conflictCount || 0;
       const conflictHtml = conflictCount ? `<div class="small warnText" style="margin:10px 0">⚠️ ${conflictCount} xung đột dữ liệu giữa các thiết bị đã được ghi lại — app giữ bản mới hơn, bản còn lại lưu an toàn tại đây.<div class="row" style="margin-top:8px"><button class="btn sm secondary" onclick="window.exportConflicts()">Tải bản sao xung đột</button><button class="btn sm secondary" onclick="window.clearConflicts()">Xóa nhật ký</button></div></div>` : '';
-      $('#settings').innerHTML = `<div class="appearanceGrid">
-        <div class="card syncCard"><div class="syncCardHead"><div><h3>Đồng bộ Đám mây</h3><div class="appearanceNote">Mỗi tài khoản Google là một workspace riêng. Đăng nhập cùng tài khoản trên nhiều thiết bị để cùng dùng một workspace cá nhân.</div></div><span class="metricBadge ${syncInfo.status === 'error' ? 'warn' : syncInfo.status === 'synced' ? 'ok' : ''}">${syncLabels[syncInfo.status] || syncInfo.status}</span></div>${syncInfo.error ? `<div class="small warnText" style="margin:10px 0">${esc(syncInfo.error)}</div>` : ''}${conflictHtml}<div class="row" style="margin-top:12px">${loginHtml}</div></div>
-        <div class="card"><h3>Appearance</h3><div class="appearanceNote" style="margin-bottom:12px">Bộ giao diện mới ưu tiên cảm giác editor/dashboard: có theme kiểu GitHub, GitLab, VS Code và nền anime-inspired nhưng vẫn giữ focus vào nội dung.</div>${themePickerHTML()}</div><div class="card"><h3>Background</h3><div class="appearanceNote" style="margin-bottom:12px">Bạn có thể dùng nền dựng sẵn hoặc upload ảnh riêng. Ảnh tải lên sẽ được nén trước khi lưu để app vẫn nhẹ.</div>${backgroundPickerHTML()}<div style="margin-top:14px" class="uploadRow"><button class="btn" onclick="uploadBackgroundPrompt()">Tải ảnh nền</button><button class="btn secondary" onclick="clearBackgroundImage()">Xóa ảnh cá nhân</button><span class="fileName">${esc(db.settings.backgroundName || 'Chưa có ảnh nền tùy chỉnh')}</span></div><input id="bgUpload" type="file" accept="image/*" hidden onchange="handleBackgroundUpload(event)"></div><div class="card"><h3>Lịch làm việc</h3><div class="form"><label>Giờ bắt đầu khả dụng<input class="input" type="time" id="setStart" value="${db.settings.availableStart}"></label><label>Giờ kết thúc khả dụng<input class="input" type="time" id="setEnd" value="${db.settings.availableEnd}"></label><label>Giới hạn việc chính hôm nay<input class="input" type="number" id="setMission" value="${db.settings.dailyMissionLimit}"></label><div class="full"><button class="btn" onclick="saveSettings()">Lưu settings</button></div></div></div><div class="card"><h3>Offline app</h3><p>Trạng thái hiện tại: <b>${navigator.onLine ? 'Online' : 'Offline'}</b>. App cache bằng service worker và dữ liệu vẫn lưu trong trình duyệt.</p><p class="small muted">Bộ nhớ dữ liệu: <b>${window.idbActive ? 'IndexedDB (ổn định, dung lượng lớn)' : 'localStorage (chế độ dự phòng)'}</b></p></div></div>`;
+      const sections = {
+        workspace: `<div class="card"><h3>Workspace cá nhân</h3>${workspaceSettingsHTML()}</div><div class="card"><h3>Lịch làm việc</h3><div class="form"><label>Giờ bắt đầu khả dụng<input class="input" type="time" id="setStart" value="${db.settings.availableStart}"></label><label>Giờ kết thúc khả dụng<input class="input" type="time" id="setEnd" value="${db.settings.availableEnd}"></label><label>Giới hạn việc chính hôm nay<input class="input" type="number" id="setMission" value="${db.settings.dailyMissionLimit}"></label><label>Ngày sinh (để xem cung hoàng đạo mỗi ngày)<input class="input" type="date" id="setBirth" value="${esc(workspace().birthDate || '')}"></label><div class="full"><button class="btn" onclick="saveSettings()">Lưu settings</button></div></div></div>`,
+        sync: `<div class="card syncCard"><div class="syncCardHead"><div><h3>Đồng bộ Đám mây</h3><div class="appearanceNote">Mỗi tài khoản Google là một workspace riêng. Đăng nhập cùng tài khoản trên nhiều thiết bị để cùng dùng một workspace cá nhân.</div></div><span class="metricBadge ${syncInfo.status === 'error' ? 'warn' : syncInfo.status === 'synced' ? 'ok' : ''}">${syncLabels[syncInfo.status] || syncInfo.status}</span></div>${syncInfo.error ? `<div class="small warnText" style="margin:10px 0">${esc(syncInfo.error)}</div>` : ''}${conflictHtml}<div class="row" style="margin-top:12px">${loginHtml}</div></div>`,
+        appearance: `<div class="card"><h3>Appearance</h3><div class="appearanceNote" style="margin-bottom:12px">Bộ giao diện ưu tiên cảm giác editor/dashboard: rõ thông tin, ít nhiễu và dùng tốt trên nhiều thiết bị.</div>${themePickerHTML()}</div><div class="card"><h3>Background</h3><div class="appearanceNote" style="margin-bottom:12px">Bạn có thể dùng nền dựng sẵn hoặc upload ảnh riêng. Ảnh tải lên sẽ được nén trước khi lưu để app vẫn nhẹ.</div>${backgroundPickerHTML()}<div style="margin-top:14px" class="uploadRow"><button class="btn" onclick="uploadBackgroundPrompt()">Tải ảnh nền</button><button class="btn secondary" onclick="clearBackgroundImage()">Xóa ảnh cá nhân</button><span class="fileName">${esc(db.settings.backgroundName || 'Chưa có ảnh nền tùy chỉnh')}</span></div><input id="bgUpload" type="file" accept="image/*" hidden onchange="handleBackgroundUpload(event)"></div>`,
+        data: `<div class="card"><h3>Offline app</h3><p>Trạng thái hiện tại: <b>${navigator.onLine ? 'Online' : 'Offline'}</b>. App cache bằng service worker và dữ liệu vẫn lưu trong trình duyệt.</p><p class="small muted">Bộ nhớ dữ liệu: <b>${window.idbActive ? 'IndexedDB (ổn định, dung lượng lớn)' : 'localStorage (chế độ dự phòng)'}</b></p><div class="row" style="margin-top:12px"><button class="btn secondary" onclick="exportData()">Xuất dữ liệu</button><button class="btn secondary" onclick="document.getElementById('importFile').click()">Nhập dữ liệu</button></div></div>`
+      };
+      $('#settings').innerHTML = `${settingsTabsHTML()}<div class="appearanceGrid">${sections[settingsSection] || sections.workspace}</div>`;
     }
-    function saveSettings() { const start = $('#setStart').value; const end = $('#setEnd').value; const missionLimit = Number($('#setMission').value) || 3; if (start && end && minOf(end) <= minOf(start)) { toast('Giờ kết thúc phải lớn hơn giờ bắt đầu.'); return; } db.settings.availableStart = start; db.settings.availableEnd = end; db.settings.dailyMissionLimit = missionLimit; touchSettings(); save(); render(); toast('Đã lưu settings') }
+    function saveSettings() { const start = $('#setStart').value; const end = $('#setEnd').value; const missionLimit = Number($('#setMission').value) || 3; if (start && end && minOf(end) <= minOf(start)) { toast('Giờ kết thúc phải lớn hơn giờ bắt đầu.'); return; } db.settings.availableStart = start; db.settings.availableEnd = end; db.settings.dailyMissionLimit = missionLimit; const birth = $('#setBirth') ? $('#setBirth').value : ''; workspace().birthDate = /^\d{4}-\d{2}-\d{2}$/.test(birth) ? birth : ''; touchSettings(); save(); render(); toast('Đã lưu settings') }
     function openModal(id) {
       const modal = $('#' + id);
       if (!modal) return;
@@ -1218,14 +1822,17 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         toast('Thông báo đã được bật trước đó.');
         return;
       }
-      Notification.requestPermission().then(p => {
+      Promise.resolve(Notification.requestPermission()).then(p => {
         db.settings.notifications = p === 'granted';
         touchSettings();
         save();
         toast(p === 'granted' ? 'Đã bật thông báo' : 'Chưa cấp quyền');
+      }).catch(err => {
+        console.warn('[TL] Notification.requestPermission failed:', err);
+        toast('Không thể yêu cầu quyền thông báo. Hãy bật trong cài đặt trình duyệt.');
       });
     }
     function notify(title, body) { if (('Notification' in window) && db.settings.notifications && Notification.permission === 'granted') new Notification(title, { body }); else toast(title + ' - ' + body) }
     // SW registered once in init() — no duplicate here
-    window.openTask = openTask; window.openTaskDetail = openTaskDetail; window.closeModal = closeModal; window.quickDur = quickDur; window.quickAdd = quickAdd; window.autoSchedule = autoSchedule; window.timelineClick = timelineClick; window.markDone = markDone; window.startFocus = startFocus; window.moveToStack = moveToStack; window.openTriage = openTriage; window.doToday = doToday; window.scheduleDebt = scheduleDebt; window.splitTask = splitTask; window.deleteById = deleteById; window.triageAction = triageAction; window.renderTriage = renderTriage; window.pauseFocus = pauseFocus; window.resumeFocus = resumeFocus; window.toggleFocusTimer = toggleFocusTimer; window.completeFocus = completeFocus; window.closeFocusReview = closeFocusReview; window.focusReviewDone = focusReviewDone; window.focusReviewSave = focusReviewSave; window.focusReviewNextAction = focusReviewNextAction; window.focusReviewStack = focusReviewStack; window.addFocus = addFocus; window.setFocusPreset = setFocusPreset; window.selectCalendarDay = selectCalendarDay; window.openEvent = openEvent; window.addPlanTask = addPlanTask; window.saveSettings = saveSettings; window.setTheme = setTheme; window.setBackgroundPreset = setBackgroundPreset; window.uploadBackgroundPrompt = uploadBackgroundPrompt; window.clearBackgroundImage = clearBackgroundImage; window.handleBackgroundUpload = handleBackgroundUpload; window.setAnalyticsPreview = setAnalyticsPreview; window.openAnalyticsDate = openAnalyticsDate; window.updateTaskFilter = updateTaskFilter; window.updateFlowSummary = updateFlowSummary; window.addFlowItem = addFlowItem; window.removeFlowItem = removeFlowItem; window.toggleFlowCheck = toggleFlowCheck; window.undoLast = undoLast; window.toast = toast; window.render = render; window.loginOrSyncHelp = loginOrSyncHelp; window.getTimelineDb = () => db; window.getTimelineDbSnapshot = getDbSnapshot;
+    window.openTask = openTask; window.openTaskDetail = openTaskDetail; window.closeModal = closeModal; window.quickDur = quickDur; window.quickAdd = quickAdd; window.autoSchedule = autoSchedule; window.timelineClick = timelineClick; window.markDone = markDone; window.startFocus = startFocus; window.moveToStack = moveToStack; window.openTriage = openTriage; window.doToday = doToday; window.scheduleDebt = scheduleDebt; window.splitTask = splitTask; window.deleteById = deleteById; window.triageAction = triageAction; window.renderTriage = renderTriage; window.pauseFocus = pauseFocus; window.resumeFocus = resumeFocus; window.toggleFocusTimer = toggleFocusTimer; window.completeFocus = completeFocus; window.closeFocusReview = closeFocusReview; window.focusReviewDone = focusReviewDone; window.focusReviewSave = focusReviewSave; window.focusReviewNextAction = focusReviewNextAction; window.focusReviewStack = focusReviewStack; window.addFocus = addFocus; window.setFocusPreset = setFocusPreset; window.selectCalendarDay = selectCalendarDay; window.openEvent = openEvent; window.addPlanTask = addPlanTask; window.saveSettings = saveSettings; window.setTheme = setTheme; window.setBackgroundPreset = setBackgroundPreset; window.uploadBackgroundPrompt = uploadBackgroundPrompt; window.clearBackgroundImage = clearBackgroundImage; window.handleBackgroundUpload = handleBackgroundUpload; window.setAnalyticsPreview = setAnalyticsPreview; window.openAnalyticsDate = openAnalyticsDate; window.updateTaskFilter = updateTaskFilter; window.setDashboardMode = setDashboardMode; window.setSettingsSection = setSettingsSection; window.addWorkspaceProject = addWorkspaceProject; window.addWorkspaceGoal = addWorkspaceGoal; window.setGoalConfidence = setGoalConfidence; window.archiveWorkspaceGoal = archiveWorkspaceGoal; window.updateFlowSummary = updateFlowSummary; window.addFlowItem = addFlowItem; window.removeFlowItem = removeFlowItem; window.toggleFlowCheck = toggleFlowCheck; window.undoLast = undoLast; window.addStickyNote = addStickyNote; window.updateStickyNote = updateStickyNote; window.setStickyColor = setStickyColor; window.deleteStickyNote = deleteStickyNote; window.toast = toast; window.render = render; window.loginOrSyncHelp = loginOrSyncHelp; window.getTimelineDb = () => db; window.getTimelineDbSnapshot = getDbSnapshot;
     init();

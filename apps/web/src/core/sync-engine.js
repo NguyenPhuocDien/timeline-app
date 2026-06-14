@@ -24,6 +24,8 @@ import {
   signInWithRedirect,
   getRedirectResult,
   GoogleAuthProvider,
+  setPersistence,
+  browserLocalPersistence,
   signOut,
   onAuthStateChanged,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
@@ -81,21 +83,49 @@ let unsubscribers = [];
 let lastSyncedLocalDb = null;
 let pushDebounceTimer = null;
 const PUSH_DEBOUNCE_MS = 800;
+// Auto-retry khi push lỗi (mạng chập chờn): nếu user không thao tác tiếp, data
+// sẽ kẹt unsynced tới lần edit sau. Thử lại có giới hạn + exponential backoff.
+let retryTimer = null;
+let retryCount = 0;
+const MAX_PUSH_RETRIES = 4;
+// Debounce sự kiện online/offline để tránh nháy trạng thái khi WiFi chập chờn.
+let netDebounceTimer = null;
+const NET_DEBOUNCE_MS = 1500;
 let syncStatus = 'signed-out';
 let lastSyncError = null;
 let isOnline = navigator.onLine;
 let latestRemoteDb = coerceDbShape({});
+let activeSessionUid = null;
+let sessionStartPromise = null;
+let authPersistenceReady = Promise.resolve();
 
 // Track initial sync để KHÔNG echo lại remote data (tránh loop)
 let initialSyncDone = false;
 
 window.addEventListener('online', () => {
   isOnline = true;
-  setSyncStatus(auth?.currentUser ? 'syncing' : 'signed-out');
+  if (netDebounceTimer) clearTimeout(netDebounceTimer);
+  netDebounceTimer = setTimeout(() => {
+    netDebounceTimer = null;
+    if (!isOnline) return; // flap đã quay lại offline trong cửa sổ debounce
+    if (auth?.currentUser && initialSyncDone) {
+      // Mạng vừa ổn định lại — đẩy ngay phần chưa sync thay vì chờ user edit.
+      retryCount = 0;
+      setSyncStatus('syncing');
+      const localDb = getLocalDbSnapshot();
+      if (localDb) actuallyPush(localDb);
+    } else {
+      setSyncStatus(auth?.currentUser ? 'syncing' : 'signed-out');
+    }
+  }, NET_DEBOUNCE_MS);
 });
 window.addEventListener('offline', () => {
   isOnline = false;
-  setSyncStatus('offline');
+  if (netDebounceTimer) clearTimeout(netDebounceTimer);
+  netDebounceTimer = setTimeout(() => {
+    netDebounceTimer = null;
+    if (!isOnline) setSyncStatus('offline');
+  }, NET_DEBOUNCE_MS);
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -122,6 +152,9 @@ export function initSyncEngine(config = DEFAULT_CONFIG) {
   try {
     app = initializeApp(config);
     auth = getAuth(app);
+    authPersistenceReady = setPersistence(auth, browserLocalPersistence).catch((persistErr) => {
+      console.warn('[sync] Auth persistence setup failed, using browser default:', persistErr);
+    });
     try {
       dbFire = initializeFirestore(app, { localCache: persistentLocalCache() });
     } catch (persistErr) {
@@ -133,7 +166,12 @@ export function initSyncEngine(config = DEFAULT_CONFIG) {
     window.auth = auth;
 
     onAuthStateChanged(auth, handleAuthStateChange);
-    getRedirectResult(auth).catch((err) => {
+    authPersistenceReady.then(() => getRedirectResult(auth)).then((result) => {
+      if (result?.user) {
+        return handleAuthStateChange(result.user);
+      }
+      return null;
+    }).catch((err) => {
       console.error('[sync] Redirect sign-in failed:', err);
       setSyncStatus('error', `Login failed: ${err?.message || err}`);
       showToast('Đăng nhập thất bại: ' + (err?.message || err));
@@ -169,9 +207,11 @@ window.firebaseLogin = async () => {
     }
 
     showToast('Đang mở cửa sổ Google để đăng nhập...');
+    await authPersistenceReady;
     const result = await signInWithPopup(auth, provider);
     if (result?.user) {
       showToast('Đã đăng nhập Google: ' + (result.user.email || result.user.displayName || 'OK'));
+      await handleAuthStateChange(result.user);
     }
   } catch (err) {
     if (err?.code === 'auth/popup-closed-by-user') {
@@ -225,17 +265,12 @@ window.firebaseLogout = () => {
 };
 
 async function handleAuthStateChange(user) {
-  // Cleanup — hủy cả push đang chờ debounce: timer cũ bắn sau khi đổi user sẽ
-  // diff với baseline null và có thể đẩy data của user cũ sang account mới.
-  if (pushDebounceTimer) { clearTimeout(pushDebounceTimer); pushDebounceTimer = null; }
-  unsubscribers.forEach((u) => { try { u(); } catch {} });
-  unsubscribers = [];
-  initialSyncDone = false;
-  lastSyncedLocalDb = null;
-
   const btn = document.getElementById('loginBtn');
 
   if (!user) {
+    cleanupSyncSession();
+    activeSessionUid = null;
+    sessionStartPromise = null;
     window.currentUserId = null;
     if (btn) {
       btn.innerHTML = '&#128273; Đăng nhập Đồng bộ';
@@ -248,22 +283,23 @@ async function handleAuthStateChange(user) {
     return;
   }
 
-  // Signed in
-  window.currentUserId = user.uid;
-  if (window.Sentry) {
-    window.Sentry.setUser({ id: user.uid }); // KHÔNG gửi email
+  if (activeSessionUid === user.uid && (sessionStartPromise || unsubscribers.length)) {
+    applySignedInUi(user, { toast: false });
+    return sessionStartPromise || Promise.resolve();
   }
 
-  const displayName = user.displayName?.split(' ')[0] || user.email?.split('@')[0] || 'User';
-  if (btn) {
-    btn.innerHTML = `👤 ${escapeHtml(displayName)} (Đăng xuất)`;
-    btn.onclick = window.firebaseLogout;
-  }
+  activeSessionUid = user.uid;
+  sessionStartPromise = startUserSession(user).finally(() => {
+    if (activeSessionUid === user.uid) sessionStartPromise = null;
+  });
+  return sessionStartPromise;
+}
 
-  showToast('✅ Đã kết nối Cloud: ' + user.email);
-  if (window.currentTab === 'settings' && typeof window.render === 'function') {
-    window.render();
-  }
+async function startUserSession(user) {
+  // Cleanup — hủy cả push đang chờ debounce: timer cũ bắn sau khi đổi user sẽ
+  // diff với baseline null và có thể đẩy data của user cũ sang account mới.
+  cleanupSyncSession();
+  applySignedInUi(user, { toast: true });
 
   setSyncStatus('syncing');
 
@@ -292,6 +328,35 @@ async function handleAuthStateChange(user) {
 
   // Subscribe to subcollections
   subscribeToCollections(user.uid);
+}
+
+function cleanupSyncSession() {
+  if (pushDebounceTimer) { clearTimeout(pushDebounceTimer); pushDebounceTimer = null; }
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+  retryCount = 0;
+  unsubscribers.forEach((u) => { try { u(); } catch {} });
+  unsubscribers = [];
+  initialSyncDone = false;
+  lastSyncedLocalDb = null;
+}
+
+function applySignedInUi(user, opts = {}) {
+  window.currentUserId = user.uid;
+  if (window.Sentry) {
+    window.Sentry.setUser({ id: user.uid }); // KHÔNG gửi email
+  }
+
+  const btn = document.getElementById('loginBtn');
+  const displayName = user.displayName?.split(' ')[0] || user.email?.split('@')[0] || 'User';
+  if (btn) {
+    btn.innerHTML = `👤 ${escapeHtml(displayName)} (Đăng xuất)`;
+    btn.onclick = window.firebaseLogout;
+  }
+
+  if (opts.toast) showToast('✅ Đã kết nối Cloud: ' + user.email);
+  if (window.currentTab === 'settings' && typeof window.render === 'function') {
+    window.render();
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -525,6 +590,7 @@ async function actuallyPush(localDb) {
     }
 
     if (writes.length === 0) {
+      retryCount = 0;
       setSyncStatus('synced');
       return;
     }
@@ -532,13 +598,35 @@ async function actuallyPush(localDb) {
     await commitBatched(uid, writes);
 
     lastSyncedLocalDb = deepClone(current);
+    retryCount = 0;
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
     setSyncStatus('synced');
   } catch (err) {
     console.error('[sync] Push failed:', err);
     setSyncStatus('error', err.message);
     showToast('❌ Lỗi đồng bộ: ' + (err.message || err));
     if (window.Sentry) window.Sentry.captureException(err);
+    scheduleRetry(uid);
   }
+}
+
+/**
+ * Lên lịch thử lại push sau khi lỗi (vd mạng chập chờn). Có giới hạn để tránh
+ * retry-storm khi lỗi vĩnh viễn (vd doc vượt 1MB) — sau MAX_PUSH_RETRIES thì
+ * dừng, lần edit kế của user sẽ tự kích hoạt sync lại.
+ */
+function scheduleRetry(uid) {
+  if (retryTimer) return;                       // đã có lịch retry
+  if (!isOnline) return;                         // offline → 'online' handler sẽ lo
+  if (retryCount >= MAX_PUSH_RETRIES) return;    // bỏ cuộc, chờ user thao tác
+  const delay = Math.min(30000, 1000 * 2 ** retryCount); // 1s, 2s, 4s, 8s
+  retryCount++;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    if (window.currentUserId !== uid || !initialSyncDone || !isOnline) return;
+    const localDb = getLocalDbSnapshot();
+    if (localDb) actuallyPush(localDb);
+  }, delay);
 }
 
 /**

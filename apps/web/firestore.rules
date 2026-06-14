@@ -123,6 +123,7 @@ service cloud.firestore {
           'id', 'title', 'date', 'duration', 'priority',
           'start', 'end', 'deadline', 'status',
           'tags', 'eventId', 'notes',
+          'projectId', 'goalId', 'impact', 'energy',
           'mission', 'done',
           'stackType', 'stackedAt', 'reason', 'deferCount', 'doneAt',
           'flow',
@@ -141,6 +142,10 @@ service cloud.firestore {
         && isOptionalString(data.get('deadline', null), 8)
         && isOptionalString(data.get('notes', null), 10000)
         && isOptionalString(data.get('eventId', null), 100)
+        && isOptionalString(data.get('projectId', null), 100)
+        && isOptionalString(data.get('goalId', null), 100)
+        && (!('impact' in data) || data.impact in ['high', 'medium', 'low'])
+        && (!('energy' in data) || data.energy in ['deep', 'normal', 'light'])
         && isOptionalString(data.get('id', null), 100)
         && isOptionalString(data.get('stackType', null), 50)
         && isOptionalString(data.get('stackedAt', null), 30)
@@ -183,6 +188,7 @@ service cloud.firestore {
           'theme', 'accent', 'availableStart', 'availableEnd',
           'dailyMissionLimit', 'notifications',
           'backgroundPreset', 'backgroundName', 'backgroundImage',
+          'workspace',
           'createdAt', 'updatedAt', 'migratedFrom'
         ])
         && isOptionalString(data.get('theme', null), 50)
@@ -195,6 +201,7 @@ service cloud.firestore {
         && (data.get('notifications', false) is bool)
         && isOptionalString(data.get('backgroundPreset', null), 50)
         && isOptionalString(data.get('backgroundName', null), 200)
+        && (!('workspace' in data) || data.workspace is map)
         // KHÔNG cho phép ghi base64 image (chống vỡ 1MB)
         && (!('backgroundImage' in data)
             || data.backgroundImage == ''
