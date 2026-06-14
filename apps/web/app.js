@@ -614,7 +614,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       // Register SW
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker
-          .register('./sw.js?v=19', { updateViaCache: 'none' })
+          .register('./sw.js?v=20', { updateViaCache: 'none' })
           .catch(err => console.warn('[SW]', err));
       }
     }
@@ -959,16 +959,12 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       if (quote) {
         inner += `<blockquote class="inspireQuote">“${esc(quote.t)}”<cite>— ${esc(quote.a)}</cite></blockquote>`;
       }
-      if (!bd) {
-        inner += `<div class="inspireHint">${uiIcon('alert')}Nhập ngày sinh ở Cài đặt → Workspace để mỗi ngày có thêm một sự thật về cung hoàng đạo của bạn.</div>`;
-      }
       return `<div class="card inspireCard"><div class="inspireKicker">✨ Cảm hứng hôm nay${isBirthday ? ' · 🎂 Chúc mừng sinh nhật bạn!' : ''}</div>${inner}</div>`;
     }
     function renderDashboard() {
-      const s = stats(); const week = weekStats(); const next = nextEvent(); const rec = recommendations(); const cockpit = renderCockpitStrip(); const commandCenter = renderCommandCenter(); $('#dashboard').innerHTML = `
+      const s = stats(); const week = weekStats(); const next = nextEvent(); const rec = recommendations(); const commandCenter = renderCommandCenter(); $('#dashboard').innerHTML = `
 ${renderInspirationHTML()}
 <div class="cmd"><div class="recommend"><h2 style="margin:0">Kế hoạch hôm nay</h2><div class="muted small">Nhìn nhanh việc cần làm và thời gian còn lại</div><ol>${rec.map(x => `<li>${x}</li>`).join('')}</ol><div class="row" style="margin-top:12px"><button class="btn sm" onclick="goTab('timeline')">Mở timeline</button><button class="btn sm secondary" onclick="openTask()">Thêm task</button><button class="btn sm secondary" onclick="openTriage()">Xử lý việc tồn</button></div></div>${renderHomeClock(next)}</div>
-${cockpit}
 ${commandCenter}
 <div class="cards"><div class="card"><h3>Hôm nay còn</h3><div class="big">${durText(s.remain)}</div><div class="bar"><i style="width:${100 - pct(s.dayPct)}%"></i></div><div class="small muted">Thời gian đang trôi trong ngày</div></div><div class="card"><h3>Task hoàn thành</h3><div class="big">${pct(s.donePct)}%</div><div class="bar"><i style="width:${pct(s.donePct)}%"></i></div><div class="small muted">${s.done.length}/${s.tasks.length} task</div></div><div class="card"><h3>Tuần này còn</h3><div class="big">${durText(week.remain)}</div><div class="bar"><i style="width:${100 - pct(week.passed)}%"></i></div><div class="small muted">${week.done}/${week.total} task xong</div></div><div class="card"><h3>Việc tồn</h3><div class="big">${stackTasks().length}</div><div class="small muted">Tổng: ${durText(stackTasks().reduce((a, t) => a + Number(t.duration || 0), 0))}</div></div></div>
 <div class="split" style="margin-top:16px"><div>${renderTaskListHTML(activeDayTasks(), true)}</div><div class="card"><h3>Việc chính hôm nay</h3>${s.mission.length ? s.mission.map(t => taskMini(t)).join('') : '<div class="muted">Chưa chọn việc chính. Nên chọn tối đa 3 task quan trọng.</div>'}</div></div>
