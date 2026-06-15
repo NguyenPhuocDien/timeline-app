@@ -16,11 +16,11 @@
  *   - Đổi cấu trúc cache (thêm/bớt resource)
  *   - Cần force invalidate cache cũ
  *
- * App.js register: navigator.serviceWorker.register('./sw.js?v=22', { updateViaCache: 'none' })
+ * App.js register: navigator.serviceWorker.register('./sw.js?v=23', { updateViaCache: 'none' })
  * → updateViaCache: 'none' đảm bảo SW file luôn fetch từ network (không cache SW)
  */
 
-const CACHE_VERSION = 'tlf-v22';
+const CACHE_VERSION = 'tlf-v23';
 const CACHE_NAME = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -28,16 +28,17 @@ const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const PRECACHE_URLS = [
   './',
   './index.html',
-  './app.js?v=22',
+  './app.js?v=23',
   './style.css',
   './manifest.webmanifest',
   './vendor/dexie.min.js',
-  './src/core/storage.js?v=22',
+  './src/core/storage.js?v=23',
   './src/core/schema.js',
   './src/core/migration.js',
-  './src/core/sync-engine.js?v=22',
-  './src/core/account-management.js?v=22',
-  './src/ui/sync-indicator.js?v=22',
+  './src/core/sync-engine.js?v=23',
+  './src/core/gcal.js?v=23',
+  './src/core/account-management.js?v=23',
+  './src/ui/sync-indicator.js?v=23',
 ];
 
 // ─── INSTALL ────────────────────────────────────────────────────────────────

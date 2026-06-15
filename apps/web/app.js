@@ -775,7 +775,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       // Register SW
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker
-          .register('./sw.js?v=22', { updateViaCache: 'none' })
+          .register('./sw.js?v=23', { updateViaCache: 'none' })
           .catch(err => console.warn('[SW]', err));
       }
     }
@@ -871,6 +871,12 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
           case 'z': case 'Z': if (e.ctrlKey || e.metaKey) { e.preventDefault(); undoLast(); } break;
         }
       });
+
+      // Google Calendar (Phase 2): khi gcal.js cập nhật token/lịch/sự kiện → re-render
+      // nếu đang ở tab Lịch (sự kiện Google chỉ hiển thị trong tab này).
+      const onGcalChange = () => { if (currentTab === 'calendar') render(); };
+      document.addEventListener('gcal-state-change', onGcalChange);
+      document.addEventListener('gcal-events-change', onGcalChange);
     }
     function render() {
       window.currentTab = currentTab;
@@ -1740,6 +1746,78 @@ ${commandCenter}
     function addDays(date, n) { const x = new Date(date); x.setDate(x.getDate() + n); return x; }
     function shiftSelectedDate(deltaDays) { selectedDate = fmtDate(addDays(parseDate(selectedDate), deltaDays)); miniCalMonth = ''; render(); }
     function setCalView(view) { if (!['month', 'week', 'day'].includes(view)) return; calView = view; try { localStorage.setItem(CAL_VIEW_KEY, view); } catch { /* ignore */ } render(); }
+    // ── Google Calendar (Phase 2: read-only, 1 chiều) ─────────────────────────
+    // gcal.js giữ sự kiện Google trong memory; app.js chỉ render + đánh dấu khóa.
+    function gcalConnected() { return typeof window.gcalIsConnected === 'function' && window.gcalIsConnected(); }
+    // Sự kiện Google trong ngày (đã tôn trọng ẩn/hiện lịch Google), shape:
+    //   { gcalId, calId, title, start, end, allDay, date, color, htmlLink }
+    function gcalEventsOnDay(fd) {
+      if (!gcalConnected() || typeof window.gcalGetEventsForDay !== 'function') return [];
+      try { return window.gcalGetEventsForDay(fd) || []; } catch { return []; }
+    }
+    // Khoảng thời gian [min, max) bao trọn lưới của view đang xem (ISO, dùng cho API).
+    function calViewRangeISO() {
+      const d = parseDate(selectedDate);
+      let start, end;
+      if (calView === 'day') { start = startOfDay(d); end = addDays(start, 1); }
+      else if (calView === 'week') { start = startOfDay(weekStart(selectedDate)); end = addDays(start, 7); }
+      else {
+        // Tháng: dùng đúng lưới 42 ô như calMonthHTML để mọi ô đều có dữ liệu.
+        const first = new Date(d.getFullYear(), d.getMonth(), 1);
+        start = new Date(first); start.setDate(first.getDate() - ((first.getDay() + 6) % 7));
+        start.setHours(0, 0, 0, 0);
+        end = addDays(start, 42);
+      }
+      return { timeMin: start.toISOString(), timeMax: end.toISOString() };
+    }
+    let gcalFetchTimer = null;
+    // Fetch sự kiện Google cho khoảng của view hiện tại (debounce để tránh spam API
+    // khi user đổi view/tháng liên tục). gcal.js tự bỏ qua nếu khoảng đã có cache.
+    function ensureGcalForCurrentView() {
+      if (!gcalConnected() || typeof window.gcalEnsureEvents !== 'function') return;
+      if (currentTab !== 'calendar') return;
+      if (gcalFetchTimer) clearTimeout(gcalFetchTimer);
+      gcalFetchTimer = setTimeout(() => {
+        gcalFetchTimer = null;
+        const { timeMin, timeMax } = calViewRangeISO();
+        window.gcalEnsureEvents(timeMin, timeMax).catch(() => { /* lỗi đã toast trong gcal.js */ });
+      }, 250);
+    }
+    // Mở chi tiết 1 sự kiện Google (read-only). Cho phép mở trên Google nếu có link.
+    function openGcalEvent(gcalId, dateStr) {
+      const ev = gcalEventsOnDay(dateStr).find(x => x.gcalId === gcalId);
+      if (!ev) return;
+      const when = ev.allDay ? 'Cả ngày' : `${esc(ev.start)}${ev.end ? '–' + esc(ev.end) : ''}`;
+      const link = ev.htmlLink ? `<a class="btn sm secondary" href="${esc(ev.htmlLink)}" target="_blank" rel="noopener">Mở trên Google</a>` : '';
+      const el = $('#taskDetailContent');
+      if (!el) { toast(`${ev.title} · ${when}`); return; }
+      el.innerHTML = `
+        <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div>
+            <div class="eyebrow">Sự kiện Google (chỉ đọc) 🔒</div>
+            <div class="h1">${esc(ev.title)}</div>
+            <div class="muted small">${esc(dateStr)} · ${when}</div>
+          </div>
+          <button class="btn secondary" onclick="closeModal('taskDetailModal')">Đóng</button>
+        </div>
+        <p class="muted small">Sự kiện này đến từ Google Calendar và không thể sửa trong ứng dụng.</p>
+        <div class="row">${link}</div>`;
+      openModal('taskDetailModal');
+    }
+    // HTML một chip/khối sự kiện Google read-only (có biểu tượng khóa).
+    function gcalChipHTML(ev) {
+      const when = ev.allDay ? '' : ` · ${esc(ev.start)}`;
+      return `<span class="wkChip gcalItem" style="--cal:${esc(ev.color)}" title="Google: ${esc(ev.title)}${when}" onclick="event.stopPropagation();openGcalEvent('${esc(ev.gcalId)}','${esc(ev.date)}')"><span class="gcalLock" aria-hidden="true">🔒</span>${esc(ev.title)}</span>`;
+    }
+    function gcalTimeBlockHTML(ev, fd) {
+      const s = minOf(ev.start), e = ev.end ? minOf(ev.end) : (s + 60);
+      const top = Math.max(0, ((s - WEEK_START_HOUR * 60) / 60) * WEEK_HOUR_H);
+      const height = Math.max(20, ((Math.max(e, s + 30) - s) / 60) * WEEK_HOUR_H - 2);
+      return `<div class="wkBlock gcalItem" style="top:${top}px;height:${height}px;--cal:${esc(ev.color)}" title="Google: ${esc(ev.title)} · ${esc(ev.start)}${ev.end ? '-' + esc(ev.end) : ''}" onclick="event.stopPropagation();openGcalEvent('${esc(ev.gcalId)}','${esc(fd)}')">
+        <div class="wkBlockName"><span class="gcalLock" aria-hidden="true">🔒</span>${esc(ev.title)}</div>
+        <div class="wkBlockTime">${esc(ev.start)}${ev.end ? '-' + esc(ev.end) : ''}</div>
+      </div>`;
+    }
     // Task có giờ (start+end) trong ngày, đã lọc theo lịch đang bật.
     function timedTasksOnDay(fd) {
       return dayTasks(fd).filter(t => t.start && t.end && isCalendarVisible(t.calendarId));
@@ -1760,6 +1838,7 @@ ${commandCenter}
     }
 
     function renderCalendar() {
+      ensureGcalForCurrentView();
       const events = eventsUpcoming();
       const viewBtn = (id, label) => `<button class="btn sm ${calView === id ? '' : 'secondary'}" aria-pressed="${calView === id}" onclick="setCalView('${id}')">${label}</button>`;
       const navStep = calView === 'month' ? 'month' : (calView === 'week' ? 'week' : 'day');
@@ -1814,9 +1893,11 @@ ${commandCenter}
         const fd = fmtDate(x);
         const tasks = dayTasks(fd).filter(t => isCalendarVisible(t.calendarId));
         const dayEvents = eventsOnDay(fd);
+        const gEvents = gcalEventsOnDay(fd);
         const eventDots = dayEvents.slice(0, 4).map(e => `<span class="dot" title="${esc(e.title)}" style="background:${calendarColor(e.calendarId)}"></span>`).join('');
         const taskDots = tasks.slice(0, 6).map(t => `<span class="dot" title="${esc(t.title)}" style="background:${t.calendarId ? calendarColor(t.calendarId) : (t.status === 'done' ? 'var(--ok)' : t.status === 'stack' ? 'var(--warn)' : 'var(--brand2)')}"></span>`).join('');
-        days += `<div class="day ${x.getMonth() !== d.getMonth() ? 'off' : ''} ${fd === selectedDate ? 'sel' : ''}" onclick="selectCalendarDay('${fd}')" ondblclick="openTask(null,{date:'${fd}'})"><div class="num">${x.getDate()}</div><div class="dots">${eventDots}${taskDots}</div><div class="small muted">${tasks.length ? `${tasks.filter(t => t.status === 'done').length}/${tasks.length} done` : ''}</div></div>`;
+        const gcalDots = gEvents.slice(0, 4).map(e => `<span class="dot gcalDot" title="Google: ${esc(e.title)}" style="background:${esc(e.color)}"></span>`).join('');
+        days += `<div class="day ${x.getMonth() !== d.getMonth() ? 'off' : ''} ${fd === selectedDate ? 'sel' : ''}" onclick="selectCalendarDay('${fd}')" ondblclick="openTask(null,{date:'${fd}'})"><div class="num">${x.getDate()}</div><div class="dots">${eventDots}${taskDots}${gcalDots}</div><div class="small muted">${tasks.length ? `${tasks.filter(t => t.status === 'done').length}/${tasks.length} done` : ''}</div></div>`;
       }
       return `<div class="calendar">${DOW_LABELS.map(x => `<div class="dow">${x}</div>`).join('')}${days}</div>`;
     }
@@ -1836,7 +1917,8 @@ ${commandCenter}
       const { tasks, events } = allDayItemsOnDay(fd);
       const evChips = events.map(ev => `<span class="wkChip" style="--cal:${calendarColor(ev.calendarId)}" title="${esc(ev.title)}">${esc(calendarIcon(ev.calendarId))} ${esc(ev.title)}</span>`).join('');
       const tkChips = tasks.map(t => `<span class="wkChip ${t.status === 'done' ? 'done' : ''}" style="--cal:${t.calendarId ? calendarColor(t.calendarId) : 'var(--brand2)'}" title="${esc(t.title)}" onclick="event.stopPropagation();openTaskDetail('${t.id}')">${esc(t.title)}</span>`).join('');
-      return evChips + tkChips;
+      const gcalChips = gcalEventsOnDay(fd).filter(ev => ev.allDay).map(gcalChipHTML).join('');
+      return evChips + tkChips + gcalChips;
     }
     // Cột giờ chung (nhãn 06:00..23:00).
     function hourGutterHTML() {
@@ -1849,7 +1931,8 @@ ${commandCenter}
       const today = fmtDate(new Date());
       let grid = '';
       for (let hr = WEEK_START_HOUR; hr < 24; hr++) grid += `<div class="wkCell" style="height:${WEEK_HOUR_H}px" onclick="quickCreateAt('${fd}',${hr})"></div>`;
-      const blocks = timedTasksOnDay(fd).map(timeBlockHTML).join('');
+      const blocks = timedTasksOnDay(fd).map(timeBlockHTML).join('')
+        + gcalEventsOnDay(fd).filter(ev => !ev.allDay && ev.start).map(ev => gcalTimeBlockHTML(ev, fd)).join('');
       const header = withHeader
         ? `<div class="wkColHead ${fd === today ? 'today' : ''} ${fd === selectedDate ? 'sel' : ''}" onclick="selectCalendarDay('${fd}')"><span class="wkDow">${DOW_LABELS[(parseDate(fd).getDay() + 6) % 7]}</span><span class="wkDate">${parseDate(fd).getDate()}</span></div>`
         : '';
@@ -1888,7 +1971,61 @@ ${commandCenter}
             ${c.system ? '' : `<button class="iconBtn" title="Xóa" onclick="deleteCalendar('${esc(c.id)}')">✕</button>`}
           </span>
         </li>`).join('');
-      return `<div class="card calPanel"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="margin:0">Lịch của tôi</h3><button class="btn sm" onclick="addCalendar()">${uiIcon('plus')}</button></div><ul class="calList">${rows}</ul></div>`;
+      return `<div class="card calPanel"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="margin:0">Lịch của tôi</h3><button class="btn sm" onclick="addCalendar()">${uiIcon('plus')}</button></div><ul class="calList">${rows}</ul>${googleCalendarsPanelHTML()}</div>`;
+    }
+    // Nhóm "Lịch Google" (read-only) trong panel "Lịch của tôi".
+    function googleCalendarsPanelHTML() {
+      const connected = gcalConnected();
+      if (!connected) {
+        return `<div class="gcalSection">
+          <div class="gcalHead"><span class="gcalBadge">Google</span> Lịch Google</div>
+          <p class="muted small" style="margin:6px 0 8px">Hiển thị sự kiện từ Google Calendar (chỉ đọc, không ghi ngược).</p>
+          <button class="btn sm" onclick="connectGoogleCalendar()">Kết nối Google Calendar</button>
+        </div>`;
+      }
+      const cals = typeof window.gcalGetCalendars === 'function' ? window.gcalGetCalendars() : [];
+      const visOf = (id) => typeof window.gcalIsCalendarVisible === 'function' ? window.gcalIsCalendarVisible(id) : true;
+      const rows = cals.map(c => `
+        <li class="calRow">
+          <label class="calTick">
+            <input type="checkbox" ${visOf(c.id) ? 'checked' : ''} onchange="toggleGcalVisible('${esc(c.id)}', this.checked)">
+            <span class="calBox" style="--cal:${esc(c.backgroundColor)}"></span>
+          </label>
+          <span class="calIcon gcalLock" aria-hidden="true">🔒</span>
+          <span class="calName" title="${esc(c.summary)}">${esc(c.summary)}</span>
+        </li>`).join('');
+      return `<div class="gcalSection">
+        <div class="gcalHead"><span class="gcalBadge">Google</span> Lịch Google <span class="pill gcalReadonly">chỉ đọc 🔒</span></div>
+        <ul class="calList">${rows || '<li class="muted small" style="padding:4px 2px">Không có lịch nào.</li>'}</ul>
+        <div class="row" style="gap:6px;margin-top:6px">
+          <button class="btn sm secondary" onclick="refreshGoogleCalendar()">Làm mới</button>
+          <button class="btn sm secondary" onclick="disconnectGoogleCalendar()">Ngắt kết nối</button>
+        </div>
+      </div>`;
+    }
+    async function connectGoogleCalendar() {
+      if (typeof window.gcalConnect !== 'function') { toast('Tính năng Google Calendar chưa sẵn sàng.'); return; }
+      const ok = await window.gcalConnect();
+      if (ok) { ensureGcalForCurrentView(); render(); }
+    }
+    function disconnectGoogleCalendar() {
+      if (typeof window.gcalDisconnect === 'function') window.gcalDisconnect();
+      render();
+    }
+    function refreshGoogleCalendar() {
+      if (!gcalConnected()) { toast('Phiên Google đã hết hạn, bấm Kết nối lại.'); render(); return; }
+      // Buộc refetch khoảng hiện tại: gcal tự bỏ cache khi key trùng nên ta gọi trực tiếp.
+      const { timeMin, timeMax } = calViewRangeISO();
+      if (typeof window.gcalEnsureEvents === 'function') {
+        window.gcalEnsureEvents(timeMin, timeMax, true).catch(() => {});
+      }
+      toast('Đang làm mới lịch Google...');
+    }
+    function toggleGcalVisible(calId, checked) {
+      if (typeof window.gcalSetCalendarVisible === 'function') window.gcalSetCalendarVisible(calId, !!checked);
+      // Bật lịch trước đó ẩn → có thể chưa fetch; đảm bảo lấy dữ liệu.
+      ensureGcalForCurrentView();
+      render();
     }
     function selectCalendarDay(d) { selectedDate = d; $('#selectedDate').value = d; miniCalMonth = ''; render() }
     // ── MINI-CALENDAR (panel phải) ────────────────────────────────────────────
@@ -1904,6 +2041,7 @@ ${commandCenter}
     }
     function miniDayHasItems(fd) {
       if (eventsOnDay(fd).length) return true;
+      if (gcalEventsOnDay(fd).length) return true;
       return dayTasks(fd).some(t => isCalendarVisible(t.calendarId));
     }
     function miniCalendarHTML() {
@@ -2230,5 +2368,5 @@ ${commandCenter}
     }
     function notify(title, body) { if (('Notification' in window) && db.settings.notifications && Notification.permission === 'granted') new Notification(title, { body }); else toast(title + ' - ' + body) }
     // SW registered once in init() — no duplicate here
-    window.openTask = openTask; window.openTaskDetail = openTaskDetail; window.closeModal = closeModal; window.quickDur = quickDur; window.quickAdd = quickAdd; window.autoSchedule = autoSchedule; window.timelineClick = timelineClick; window.markDone = markDone; window.startFocus = startFocus; window.moveToStack = moveToStack; window.openTriage = openTriage; window.doToday = doToday; window.scheduleDebt = scheduleDebt; window.splitTask = splitTask; window.deleteById = deleteById; window.triageAction = triageAction; window.renderTriage = renderTriage; window.pauseFocus = pauseFocus; window.resumeFocus = resumeFocus; window.toggleFocusTimer = toggleFocusTimer; window.completeFocus = completeFocus; window.closeFocusReview = closeFocusReview; window.focusReviewDone = focusReviewDone; window.focusReviewSave = focusReviewSave; window.focusReviewNextAction = focusReviewNextAction; window.focusReviewStack = focusReviewStack; window.addFocus = addFocus; window.setFocusPreset = setFocusPreset; window.selectCalendarDay = selectCalendarDay; window.openEvent = openEvent; window.addPlanTask = addPlanTask; window.toggleCalendarVisible = toggleCalendarVisible; window.addCalendar = addCalendar; window.editCalendar = editCalendar; window.deleteCalendar = deleteCalendar; window.toggleCreateMenu = toggleCreateMenu; window.createFromMenu = createFromMenu; window.setCalView = setCalView; window.calNavigate = calNavigate; window.calGoToday = calGoToday; window.miniCalNavigate = miniCalNavigate; window.quickCreateAt = quickCreateAt; window.saveSettings = saveSettings; window.setTheme = setTheme; window.setBackgroundPreset = setBackgroundPreset; window.uploadBackgroundPrompt = uploadBackgroundPrompt; window.clearBackgroundImage = clearBackgroundImage; window.handleBackgroundUpload = handleBackgroundUpload; window.setAnalyticsPreview = setAnalyticsPreview; window.openAnalyticsDate = openAnalyticsDate; window.updateTaskFilter = updateTaskFilter; window.setDashboardMode = setDashboardMode; window.setSettingsSection = setSettingsSection; window.addWorkspaceProject = addWorkspaceProject; window.addWorkspaceGoal = addWorkspaceGoal; window.setGoalConfidence = setGoalConfidence; window.archiveWorkspaceGoal = archiveWorkspaceGoal; window.updateFlowSummary = updateFlowSummary; window.addFlowItem = addFlowItem; window.removeFlowItem = removeFlowItem; window.toggleFlowCheck = toggleFlowCheck; window.undoLast = undoLast; window.addStickyNote = addStickyNote; window.updateStickyNote = updateStickyNote; window.setStickyColor = setStickyColor; window.deleteStickyNote = deleteStickyNote; window.purgeExpiredCloudData = purgeExpiredCloudData; window.requestAccountDeletion = requestAccountDeletion; window.toast = toast; window.render = render; window.loginOrSyncHelp = loginOrSyncHelp; window.getTimelineDb = () => db; window.getTimelineDbSnapshot = getDbSnapshot;
+    window.openTask = openTask; window.openTaskDetail = openTaskDetail; window.closeModal = closeModal; window.quickDur = quickDur; window.quickAdd = quickAdd; window.autoSchedule = autoSchedule; window.timelineClick = timelineClick; window.markDone = markDone; window.startFocus = startFocus; window.moveToStack = moveToStack; window.openTriage = openTriage; window.doToday = doToday; window.scheduleDebt = scheduleDebt; window.splitTask = splitTask; window.deleteById = deleteById; window.triageAction = triageAction; window.renderTriage = renderTriage; window.pauseFocus = pauseFocus; window.resumeFocus = resumeFocus; window.toggleFocusTimer = toggleFocusTimer; window.completeFocus = completeFocus; window.closeFocusReview = closeFocusReview; window.focusReviewDone = focusReviewDone; window.focusReviewSave = focusReviewSave; window.focusReviewNextAction = focusReviewNextAction; window.focusReviewStack = focusReviewStack; window.addFocus = addFocus; window.setFocusPreset = setFocusPreset; window.selectCalendarDay = selectCalendarDay; window.openEvent = openEvent; window.addPlanTask = addPlanTask; window.toggleCalendarVisible = toggleCalendarVisible; window.addCalendar = addCalendar; window.editCalendar = editCalendar; window.deleteCalendar = deleteCalendar; window.connectGoogleCalendar = connectGoogleCalendar; window.disconnectGoogleCalendar = disconnectGoogleCalendar; window.refreshGoogleCalendar = refreshGoogleCalendar; window.toggleGcalVisible = toggleGcalVisible; window.openGcalEvent = openGcalEvent; window.toggleCreateMenu = toggleCreateMenu; window.createFromMenu = createFromMenu; window.setCalView = setCalView; window.calNavigate = calNavigate; window.calGoToday = calGoToday; window.miniCalNavigate = miniCalNavigate; window.quickCreateAt = quickCreateAt; window.saveSettings = saveSettings; window.setTheme = setTheme; window.setBackgroundPreset = setBackgroundPreset; window.uploadBackgroundPrompt = uploadBackgroundPrompt; window.clearBackgroundImage = clearBackgroundImage; window.handleBackgroundUpload = handleBackgroundUpload; window.setAnalyticsPreview = setAnalyticsPreview; window.openAnalyticsDate = openAnalyticsDate; window.updateTaskFilter = updateTaskFilter; window.setDashboardMode = setDashboardMode; window.setSettingsSection = setSettingsSection; window.addWorkspaceProject = addWorkspaceProject; window.addWorkspaceGoal = addWorkspaceGoal; window.setGoalConfidence = setGoalConfidence; window.archiveWorkspaceGoal = archiveWorkspaceGoal; window.updateFlowSummary = updateFlowSummary; window.addFlowItem = addFlowItem; window.removeFlowItem = removeFlowItem; window.toggleFlowCheck = toggleFlowCheck; window.undoLast = undoLast; window.addStickyNote = addStickyNote; window.updateStickyNote = updateStickyNote; window.setStickyColor = setStickyColor; window.deleteStickyNote = deleteStickyNote; window.purgeExpiredCloudData = purgeExpiredCloudData; window.requestAccountDeletion = requestAccountDeletion; window.toast = toast; window.render = render; window.loginOrSyncHelp = loginOrSyncHelp; window.getTimelineDb = () => db; window.getTimelineDbSnapshot = getDbSnapshot;
     init();

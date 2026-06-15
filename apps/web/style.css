@@ -1236,6 +1236,20 @@
     .wkBlockName { font-size: 11px; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .wkBlockTime { font-size: 10px; color: var(--muted); }
 
+    /* ---- Google Calendar (Phase 2: read-only) ---- */
+    /* Phân biệt rõ với item local: viền nét đứt + biểu tượng khóa, không gợi ý chỉnh sửa. */
+    .wkChip.gcalItem { border-left-style: dashed; font-style: italic; }
+    .wkBlock.gcalItem { border-left-style: dashed; }
+    .gcalLock { font-size: 9px; margin-right: 2px; opacity: 0.85; }
+    .dot.gcalDot { box-shadow: 0 0 0 1.5px var(--panel); outline: 1px dashed color-mix(in srgb, var(--muted) 60%, transparent); }
+    .gcalSection { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+    .gcalHead { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-weight: 700; font-size: 13px; }
+    .gcalBadge {
+      font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
+      color: #fff; background: linear-gradient(90deg, #4285f4, #34a853);
+    }
+    .pill.gcalReadonly { font-size: 10px; padding: 1px 7px; }
+
     /* ---- Modals ---- */
     .modal {
       position: fixed;

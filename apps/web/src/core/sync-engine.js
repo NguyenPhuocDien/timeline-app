@@ -23,6 +23,7 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
+  reauthenticateWithPopup,
   GoogleAuthProvider,
   setPersistence,
   browserLocalPersistence,
@@ -163,6 +164,13 @@ export function initSyncEngine(config = DEFAULT_CONFIG) {
 
     window.dbFire = dbFire;
     window.auth = auth;
+    // Expose tối thiểu cho gcal.js (Phase 2 — Google Calendar read-only). Không
+    // đổi luồng login thường: scope calendar chỉ được xin trong gcal.gcalConnect().
+    window.firebaseAuthApi = {
+      GoogleAuthProvider,
+      signInWithPopup,
+      reauthenticateWithPopup,
+    };
 
     onAuthStateChanged(auth, handleAuthStateChange);
     authPersistenceReady.then(() => getRedirectResult(auth)).then((result) => {
