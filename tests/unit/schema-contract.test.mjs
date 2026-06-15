@@ -39,6 +39,44 @@ test('schema sanitizers produce stable Firestore payloads', async () => {
   assert.equal('unknown' in settings, false);
 });
 
+test('calendarId + calendars survive sanitization with strict validation', async () => {
+  const schema = await importSchemaModule();
+
+  const event = schema.sanitizeEventForFirestore({
+    id: 'evt-1',
+    title: 'Họp',
+    date: '2026-06-15',
+    calendarId: 'c'.repeat(200),
+  });
+  assert.equal(event.calendarId.length, 100);
+
+  const task = schema.sanitizeTaskForFirestore({
+    id: 'task-1',
+    title: 'x',
+    date: '2026-06-15',
+    duration: 30,
+    calendarId: 'cal-deepwork',
+  });
+  assert.equal(task.calendarId, 'cal-deepwork');
+
+  const settings = schema.sanitizeSettingsForFirestore({
+    workspace: {
+      calendars: [
+        { id: 'cal-a', name: 'n'.repeat(200), color: 'not-a-hex', icon: 'iconwaytoolong', visible: false, system: true },
+        { id: '', name: 'dropped' },
+      ],
+    },
+  });
+  assert.equal(settings.workspace.calendars.length, 1);
+  const cal = settings.workspace.calendars[0];
+  assert.equal(cal.id, 'cal-a');
+  assert.equal(cal.name.length, 80);
+  assert.equal(cal.color, '#2563eb'); // invalid hex falls back to default
+  assert.ok(cal.icon.length <= 8);
+  assert.equal(cal.visible, false);
+  assert.equal(cal.system, true);
+});
+
 test('migration and sync use the same Firestore collection contract', async () => {
   const [migration, sync] = await Promise.all([
     readFile(path.join(webRoot, 'src', 'core', 'migration.js'), 'utf8'),

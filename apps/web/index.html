@@ -178,6 +178,7 @@
                 <option value="light">Nhẹ</option>
               </select></label>
           </div>
+          <label class="field full">Lịch<select id="fCalendar"></select></label>
           <label class="field full">Liên kết sự kiện<select id="fEvent"></select></label>
           <div class="checks formChecks">
             <label class="checkCard"><input type="checkbox" id="fMission"> <span>Việc chính hôm nay</span></label>
@@ -206,6 +207,7 @@
             <option value="lunar">Âm lịch tham khảo</option>
           </select></label>
         <label>Ngày<input class="input" id="eDate" type="date"></label>
+        <label>Lịch<select id="eCalendar"></select></label>
         <label>Lặp lại<select id="eRecurring">
             <option value="yes">Hằng năm</option>
             <option value="no">Một lần</option>
@@ -254,13 +256,13 @@
     </div>
   </div>
   <div class="toast" id="toast"></div>
-  <script src="app.js?v=21"></script>
+  <script src="app.js?v=22"></script>
 
   <!-- Local storage engine (IndexedDB/Dexie), Firebase Auth, Firestore sync, and sync status UI -->
-  <script type="module" src="src/core/storage.js?v=21"></script>
-  <script type="module" src="src/core/sync-engine.js?v=21"></script>
-  <script type="module" src="src/core/account-management.js?v=21"></script>
-  <script type="module" src="src/ui/sync-indicator.js?v=21"></script>
+  <script type="module" src="src/core/storage.js?v=22"></script>
+  <script type="module" src="src/core/sync-engine.js?v=22"></script>
+  <script type="module" src="src/core/account-management.js?v=22"></script>
+  <script type="module" src="src/ui/sync-indicator.js?v=22"></script>
 </body>
 
 </html>

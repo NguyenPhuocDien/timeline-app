@@ -663,6 +663,7 @@
     body.has-wallpaper .timelineWrap,
     body.has-wallpaper .hourLabel,
     body.has-wallpaper .calendar,
+    body.has-wallpaper .wkScroll,
     body.has-wallpaper .mobileTabs,
     body.has-wallpaper .table th,
     body.has-wallpaper .table td {
@@ -1121,6 +1122,119 @@
 
     .dots { display: flex; gap: 3px; margin-top: auto; flex-wrap: wrap; }
     .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
+
+    /* ---- Calendar: layout + "Lịch của tôi" panel + menu Tạo ---- */
+    .calMain { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; align-items: start; }
+    .calLeft { min-width: 0; }
+    .calSide { min-width: 0; }
+    @media (max-width: 860px) { .calMain { grid-template-columns: 1fr; } }
+
+    .createMenu { position: relative; }
+    .createDropdown {
+      position: absolute; top: calc(100% + 6px); left: 0; z-index: 30;
+      background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18); padding: 6px; min-width: 200px;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .createDropdown[hidden] { display: none; }
+    .createItem {
+      text-align: left; background: transparent; border: 0; color: var(--text);
+      padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 14px;
+    }
+    .createItem:hover { background: var(--brand-light); }
+
+    .calPanel .calList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+    .calRow { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-radius: 8px; }
+    .calRow:hover { background: var(--brand-light); }
+    .calRow:hover .calActions { opacity: 1; }
+    .calTick { display: inline-flex; align-items: center; cursor: pointer; position: relative; }
+    .calTick input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .calBox {
+      width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--cal, var(--brand));
+      background: transparent; display: inline-block; transition: background 0.12s;
+    }
+    .calTick input:checked + .calBox { background: var(--cal, var(--brand)); }
+    .calIcon { font-size: 15px; line-height: 1; }
+    .calName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+    .calActions { display: inline-flex; gap: 2px; opacity: 0; transition: opacity 0.12s; }
+    .iconBtn {
+      background: transparent; border: 0; color: var(--muted); cursor: pointer;
+      width: 22px; height: 22px; border-radius: 6px; font-size: 13px; line-height: 1;
+    }
+    .iconBtn:hover { background: var(--panel2); color: var(--text); }
+
+    /* ---- Calendar: bộ chuyển view + điều hướng ---- */
+    .calViewSwitch { display: inline-flex; gap: 4px; }
+    .calNav { display: inline-flex; align-items: center; gap: 6px; }
+    .calNavBtn { width: 28px; height: 28px; font-size: 18px; border: 1px solid var(--line); }
+    .calNavLabel { font-weight: 600; font-size: 14px; min-width: 120px; }
+
+    /* ---- Mini-calendar ---- */
+    .miniCal { padding: 12px; margin-bottom: 14px; }
+    .miniHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .miniTitle { font-weight: 700; font-size: 13px; }
+    .miniGrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .miniDow { text-align: center; font-size: 10px; color: var(--muted); font-weight: 600; padding-bottom: 2px; }
+    .miniCell {
+      position: relative; aspect-ratio: 1; border: 0; background: transparent; color: var(--text);
+      border-radius: 6px; cursor: pointer; font-size: 12px; line-height: 1; display: flex;
+      align-items: center; justify-content: center; transition: background 0.12s;
+    }
+    .miniCell:hover { background: var(--brand-light); }
+    .miniCell.off { color: var(--muted); opacity: 0.5; }
+    .miniCell.today { font-weight: 800; color: var(--brand); }
+    .miniCell.sel { background: var(--brand); color: #fff; }
+    .miniCell.has::after {
+      content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%);
+      width: 4px; height: 4px; border-radius: 50%; background: var(--brand);
+    }
+    .miniCell.sel.has::after { background: #fff; }
+
+    /* ---- Calendar: view Tuần / Ngày ---- */
+    .wkScroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
+    .wkView { display: grid; grid-template-columns: 52px 1fr; min-width: 640px; }
+    .wkView.dayMode { min-width: 0; }
+    .wkCols { display: grid; grid-template-columns: repeat(7, minmax(80px, 1fr)); }
+    .wkView.dayMode .wkCols { grid-template-columns: 1fr; }
+    .wkGutter { border-right: 1px solid var(--line); }
+    .wkAllDaySpacer { height: 56px; border-bottom: 1px solid var(--line); font-size: 10px; color: var(--muted); display: flex; align-items: flex-end; justify-content: flex-end; padding: 0 6px 4px; }
+    .wkHourLabel { font-size: 10px; color: var(--muted); text-align: right; padding: 2px 6px 0 0; box-sizing: border-box; }
+    .wkCol { border-right: 1px solid var(--line); min-width: 0; }
+    .wkCol:last-child { border-right: 0; }
+    .wkCol.selCol { background: color-mix(in srgb, var(--brand) 5%, transparent); }
+    .wkColHead {
+      height: 34px; display: flex; align-items: center; justify-content: center; gap: 5px;
+      border-bottom: 1px solid var(--line); cursor: pointer; font-size: 12px;
+    }
+    .wkColHead:hover { background: var(--brand-light); }
+    .wkColHead .wkDow { color: var(--muted); text-transform: uppercase; font-size: 10px; }
+    .wkColHead .wkDate { font-weight: 700; }
+    .wkColHead.today .wkDate { background: var(--brand); color: #fff; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+    .wkColHead.sel { background: var(--brand-light); }
+    .wkAllDay {
+      min-height: 22px; max-height: 56px; overflow-y: auto; border-bottom: 1px solid var(--line);
+      padding: 2px; display: flex; flex-direction: column; gap: 2px;
+    }
+    .wkView.dayMode .wkAllDay { min-height: 56px; }
+    .wkChip {
+      font-size: 11px; padding: 2px 6px; border-radius: 5px; cursor: pointer;
+      background: color-mix(in srgb, var(--cal, var(--brand)) 16%, var(--panel));
+      border-left: 3px solid var(--cal, var(--brand)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .wkChip.done { opacity: 0.55; text-decoration: line-through; }
+    .wkGrid { position: relative; }
+    .wkCell { border-bottom: 1px solid var(--line); cursor: pointer; box-sizing: border-box; }
+    .wkCell:hover { background: color-mix(in srgb, var(--brand) 6%, transparent); }
+    .wkBlock {
+      position: absolute; left: 2px; right: 2px; border-radius: 5px; padding: 2px 5px;
+      overflow: hidden; cursor: pointer; box-sizing: border-box;
+      background: color-mix(in srgb, var(--cal, var(--brand)) 18%, var(--panel));
+      border-left: 3px solid var(--cal, var(--brand)); color: var(--text);
+    }
+    .wkBlock:hover { box-shadow: var(--shadow-md); }
+    .wkBlock.done { opacity: 0.6; }
+    .wkBlockName { font-size: 11px; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .wkBlockTime { font-size: 10px; color: var(--muted); }
 
     /* ---- Modals ---- */
     .modal {
@@ -2727,6 +2841,7 @@
       body.has-wallpaper .timelineWrap,
       body.has-wallpaper .hourLabel,
       body.has-wallpaper .calendar,
+      body.has-wallpaper .wkScroll,
       body.has-wallpaper .mobileTabs,
       body.has-wallpaper .table th,
       body.has-wallpaper .table td {
@@ -2849,6 +2964,7 @@
       .calendar { gap: 4px; }
       .day { min-height: 70px; padding: 6px; }
       .day .num { font-size: 14px; }
+      .calNavLabel { min-width: 0; }
       .h1 { font-size: 18px; }
       .dialog { padding: 14px; }
       .taskDialog {

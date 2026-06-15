@@ -127,7 +127,7 @@ service cloud.firestore {
       return data.keys().hasOnly([
           'id', 'title', 'date', 'duration', 'priority',
           'start', 'end', 'deadline', 'status',
-          'tags', 'eventId', 'notes',
+          'tags', 'eventId', 'calendarId', 'notes',
           'projectId', 'goalId', 'impact', 'energy',
           'mission', 'done',
           'stackType', 'stackedAt', 'reason', 'deferCount', 'doneAt',
@@ -147,6 +147,7 @@ service cloud.firestore {
         && isOptionalString(data.get('deadline', null), 10)
         && isOptionalString(data.get('notes', null), 10000)
         && isOptionalString(data.get('eventId', null), 100)
+        && isOptionalString(data.get('calendarId', null), 100)
         && isOptionalString(data.get('projectId', null), 100)
         && isOptionalString(data.get('goalId', null), 100)
         && (!('impact' in data) || data.impact in ['high', 'medium', 'low'])
@@ -169,7 +170,7 @@ service cloud.firestore {
 
     function isValidEvent(data) {
       return data.keys().hasOnly([
-          'id', 'title', 'type', 'date', 'recurring', 'notes',
+          'id', 'title', 'type', 'date', 'recurring', 'calendarId', 'notes',
           'createdAt', 'updatedAt', 'deletedAt',
           'migratedFrom'
         ])
@@ -177,6 +178,7 @@ service cloud.firestore {
         && isString(data.date, 10)
         && data.type in ['solar', 'lunar']
         && data.recurring is bool
+        && isOptionalString(data.get('calendarId', null), 100)
         && isOptionalString(data.get('notes', null), 5000)
         && isOptionalString(data.get('createdAt', null), 30)
         && isOptionalString(data.get('updatedAt', null), 30)

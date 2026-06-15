@@ -111,6 +111,7 @@ export function sanitizeTaskForFirestore(task) {
   if (task.deadline) out.deadline = String(task.deadline).slice(0, 10);
   if (task.notes) out.notes = String(task.notes).slice(0, 10000);
   if (task.eventId) out.eventId = String(task.eventId).slice(0, 100);
+  if (task.calendarId) out.calendarId = String(task.calendarId).slice(0, 100);
   if (task.projectId) out.projectId = String(task.projectId).slice(0, 100);
   if (task.goalId) out.goalId = String(task.goalId).slice(0, 100);
   if (task.impact) out.impact = ['high', 'medium', 'low'].includes(task.impact) ? task.impact : 'medium';
@@ -186,6 +187,7 @@ export function sanitizeEventForFirestore(event) {
   out.type = EVENT_TYPES.includes(event.type) ? event.type : 'solar';
   // App.js: recurring là boolean (true/false), NOT 'yes'/'no'
   out.recurring = event.recurring !== false;
+  if (event.calendarId) out.calendarId = String(event.calendarId).slice(0, 100);
   if (event.notes) out.notes = String(event.notes).slice(0, 5000);
   if (event.createdAt) out.createdAt = String(event.createdAt).slice(0, 30);
   if (event.updatedAt) out.updatedAt = String(event.updatedAt).slice(0, 30);
@@ -241,7 +243,20 @@ function sanitizeWorkspace(workspace) {
   const projects = Array.isArray(workspace.projects) ? workspace.projects : [];
   const goals = Array.isArray(workspace.goals) ? workspace.goals : [];
   const notes = Array.isArray(workspace.notes) ? workspace.notes : [];
+  const calendars = Array.isArray(workspace.calendars) ? workspace.calendars : [];
   return {
+    // Calendars (Google-Calendar-style categories) sống trong workspace để sync
+    // qua doc settings sẵn có. Tên do user nhập → validate chặt khi sanitize, render
+    // luôn đi qua esc() ở app.js. Rules chỉ cần `workspace is map` (không đổi rules).
+    calendars: calendars.slice(0, 50).map(c => ({
+      id: String(c?.id || '').slice(0, 100),
+      name: String(c?.name || 'Lịch').slice(0, 80),
+      color: /^#[0-9a-f]{6}$/i.test(String(c?.color || '')) ? String(c.color) : '#2563eb',
+      // icon là 1 emoji/ký tự ngắn — giới hạn độ dài để không nhét HTML/markup dài
+      icon: String(c?.icon || '📅').slice(0, 8),
+      visible: c?.visible !== false,
+      system: Boolean(c?.system)
+    })).filter(c => c.id),
     projects: projects.slice(0, 24).map(p => ({
       id: String(p?.id || '').slice(0, 100),
       name: String(p?.name || 'Project').slice(0, 80),

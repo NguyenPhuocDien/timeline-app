@@ -65,14 +65,33 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       { id: 'seed-2026-10-20-phu-nu-viet-nam', title: 'Ngày Phụ nữ Việt Nam', type: 'solar', date: '2026-10-20', recurring: true, notes: '' }, { id: 'seed-2026-11-20-nha-giao', title: 'Ngày Nhà giáo Việt Nam', type: 'solar', date: '2026-11-20', recurring: true, notes: '' }, { id: 'seed-2026-12-25-giang-sinh', title: 'Giáng sinh', type: 'solar', date: '2026-12-25', recurring: true, notes: '' }, { id: 'seed-2027-02-01-ong-cong-ong-tao', title: 'Ông Công Ông Táo', type: 'lunar', date: '2027-02-01', recurring: true, notes: '23 tháng Chạp âm lịch, tham khảo' },
       { id: 'seed-2027-02-06-tet-nguyen-dan', title: 'Tết Nguyên Đán', type: 'lunar', date: '2027-02-06', recurring: true, notes: 'Mùng 1 Tết âm lịch, tham khảo' }
     ];
+    // Calendars mặc định (kiểu Google Calendar) — id CỐ ĐỊNH để seed idempotent,
+    // không nhân đôi khi merge giữa thiết bị. "cal-personal" là lịch mặc định (primary).
+    const CALENDAR_SEED = [
+      { id: 'cal-personal', name: 'Cá nhân', color: '#2563eb', icon: '🙂', visible: true, system: true },
+      { id: 'cal-tasks', name: 'Tasks', color: '#0ea5e9', icon: '✅', visible: true, system: true },
+      { id: 'cal-selfcare', name: 'Self-care', color: '#10b981', icon: '🌿', visible: true, system: true },
+      { id: 'cal-socialize', name: 'Socialize', color: '#f59e0b', icon: '🥂', visible: true, system: true },
+      { id: 'cal-deadline', name: 'Deadline', color: '#ef4444', icon: '⏰', visible: true, system: true },
+      { id: 'cal-schoolwork', name: 'Schoolwork', color: '#8b5cf6', icon: '📚', visible: true, system: true },
+      { id: 'cal-deepwork', name: 'Deep Work', color: '#6366f1', icon: '🎯', visible: true, system: true },
+      { id: 'cal-birthday', name: 'Sinh nhật', color: '#ec4899', icon: '🎂', visible: true, system: true }
+    ];
+    const DEFAULT_CALENDAR_ID = 'cal-personal';
     const WORKSPACE_DEFAULTS = {
       projects: [{ id: 'personal', name: 'Personal Ops', color: '#2563eb', status: 'active' }],
-      goals: []
+      goals: [],
+      calendars: JSON.parse(JSON.stringify(CALENDAR_SEED))
     };
     const SETTINGS_DEFAULTS = { theme: 'github-light', accent: 'blue', availableStart: '07:00', availableEnd: '22:00', dailyMissionLimit: 3, notifications: false, backgroundPreset: 'none', backgroundImage: '', backgroundName: '', workspace: null };
     let currentTab = 'dashboard', selectedDate = fmtDate(new Date()), editingTaskId = null, detailTaskId = null, focusTimer = null, focusRemain = 0, focusTaskId = null, focusStartedAt = null, focusInitialSeconds = 0, focusEndAt = null;
     let undoStack = [], pendingFocusReview = null, analyticsPreviewDate = fmtDate(new Date()), dashboardMode = 'day', settingsSection = 'sync';
     let taskFilters = { q: '', status: 'all', priority: 'all', tag: 'all', project: 'all', special: 'all' };
+    // Chế độ xem lịch (Tháng/Tuần/Ngày) — lưu riêng trong localStorage, KHÔNG đụng storage.js.
+    const CAL_VIEW_KEY = 'tlf_calView';
+    let calView = (() => { try { const v = localStorage.getItem(CAL_VIEW_KEY); return ['month', 'week', 'day'].includes(v) ? v : 'month'; } catch { return 'month'; } })();
+    // Tháng đang hiển thị của mini-calendar (chuỗi 'YYYY-MM'); mặc định theo ngày đang chọn.
+    let miniCalMonth = '';
     let lastNavRenderKey = '';
     let lastRealtimeTick = 0;
     let db = load();
@@ -302,7 +321,26 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         }))
         .slice(0, 50);
       const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(String(source.birthDate || '')) ? source.birthDate : '';
-      return { projects, goals, notes, birthDate };
+      const calendars = normalizeCalendars(source.calendars);
+      return { projects, goals, notes, calendars, birthDate };
+    }
+    function normalizeCalendars(raw) {
+      const list = (Array.isArray(raw) ? raw : [])
+        .map(c => ({
+          id: safeId(c?.id || uid()),
+          name: safeStr(c?.name).trim().slice(0, 80) || 'Lịch',
+          color: /^#[0-9a-f]{6}$/i.test(String(c?.color || '')) ? String(c.color) : '#2563eb',
+          icon: safeStr(c?.icon).slice(0, 8) || '📅',
+          visible: c?.visible !== false,
+          system: Boolean(c?.system)
+        }))
+        .slice(0, 50);
+      const seen = new Set(list.map(c => c.id));
+      // SEED idempotent: chỉ thêm lịch hệ thống còn THIẾU, KHÔNG ghi đè cái user đã có.
+      for (const seed of CALENDAR_SEED) {
+        if (!seen.has(seed.id)) { list.push({ ...seed }); seen.add(seed.id); }
+      }
+      return list.slice(0, 50);
     }
     function workspace() {
       db.settings.workspace = normalizeWorkspace(db.settings.workspace);
@@ -310,6 +348,63 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     }
     function projectName(id) { return workspace().projects.find(p => p.id === id)?.name || 'Inbox' }
     function projectColor(id) { return workspace().projects.find(p => p.id === id)?.color || '#94a3b8' }
+    // ── Calendars (kiểu Google Calendar) ─────────────────────────────────────
+    function calendars() { return workspace().calendars; }
+    function getCalendar(id) { return calendars().find(c => c.id === id) || null; }
+    function defaultCalendar() { return getCalendar(DEFAULT_CALENDAR_ID) || calendars()[0] || null; }
+    function calendarColor(id) { return (getCalendar(id) || defaultCalendar())?.color || '#2563eb'; }
+    function calendarIcon(id) { return (getCalendar(id) || defaultCalendar())?.icon || '📅'; }
+    function isCalendarVisible(id) {
+      const c = getCalendar(id) || defaultCalendar();
+      return c ? c.visible !== false : true;
+    }
+    function calendarOptionsHTML(selected = '') {
+      return calendars().map(c => `<option value="${esc(c.id)}" ${selected === c.id ? 'selected' : ''}>${esc(c.icon)} ${esc(c.name)}</option>`).join('');
+    }
+    function toggleCalendarVisible(id) {
+      const c = getCalendar(id);
+      if (!c) return;
+      c.visible = c.visible === false;
+      touchSettings(); save(); render();
+    }
+    function addCalendar() {
+      const name = (prompt('Tên lịch mới:', '') || '').trim();
+      if (!name) return;
+      const color = (prompt('Màu (hex, ví dụ #2563eb):', '#2563eb') || '').trim();
+      const icon = (prompt('Emoji/icon (1 ký tự):', '📅') || '').trim();
+      calendars().push({
+        id: uid(),
+        name: name.slice(0, 80),
+        color: /^#[0-9a-f]{6}$/i.test(color) ? color : '#2563eb',
+        icon: icon.slice(0, 8) || '📅',
+        visible: true,
+        system: false
+      });
+      touchSettings(); save(); render(); toast('Đã thêm lịch');
+    }
+    function editCalendar(id) {
+      const c = getCalendar(id);
+      if (!c) return;
+      const name = (prompt('Tên lịch:', c.name) || '').trim();
+      if (name) c.name = name.slice(0, 80);
+      const color = (prompt('Màu (hex):', c.color) || '').trim();
+      if (/^#[0-9a-f]{6}$/i.test(color)) c.color = color;
+      const icon = (prompt('Emoji/icon:', c.icon) || '').trim();
+      if (icon) c.icon = icon.slice(0, 8);
+      touchSettings(); save(); render(); toast('Đã cập nhật lịch');
+    }
+    function deleteCalendar(id) {
+      const c = getCalendar(id);
+      if (!c) return;
+      if (c.system) { toast('Không thể xóa lịch hệ thống.'); return; }
+      if (!confirm(`Xóa lịch "${c.name}"? Sự kiện thuộc lịch này sẽ về lịch mặc định.`)) return;
+      const ws = workspace();
+      ws.calendars = ws.calendars.filter(x => x.id !== id);
+      // Sự kiện/task đang trỏ tới lịch bị xóa → rơi về lịch mặc định (xóa field).
+      db.events.forEach(e => { if (e.calendarId === id) delete e.calendarId; });
+      db.tasks.forEach(t => { if (t.calendarId === id) delete t.calendarId; });
+      touchSettings(); save(); render(); toast('Đã xóa lịch');
+    }
     // ── Sticky notes (Ghi chú nhanh) ──────────────────────────────────────────
     function stickyNotes() { return workspace().notes; }
     function addStickyNote() {
@@ -571,6 +666,9 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       t.reason = safeStr(t.reason);
       t.stackType = safeStr(t.stackType);
       t.eventId = safeStr(t.eventId);
+      // calendarId: chỉ giữ nếu trỏ tới lịch có thật, ngược lại bỏ field (→ lịch mặc định)
+      if (t.calendarId && !getCalendar(String(t.calendarId))) delete t.calendarId;
+      else if (t.calendarId) t.calendarId = String(t.calendarId);
       const ws = workspace();
       const projectIds = new Set(ws.projects.map(p => p.id));
       const goalIds = new Set(ws.goals.filter(g => g.status !== 'archived').map(g => g.id));
@@ -587,6 +685,8 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       ev.date = safeDate(ev.date, fmtDate(new Date()));
       ev.type = ev.type === 'lunar' ? 'lunar' : 'solar';
       ev.recurring = !!ev.recurring;
+      if (ev.calendarId && !getCalendar(String(ev.calendarId))) delete ev.calendarId;
+      else if (ev.calendarId) ev.calendarId = String(ev.calendarId);
       ev.notes = safeStr(ev.notes);
     }
     function sanitizeSessionFields(s) {
@@ -675,7 +775,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       // Register SW
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker
-          .register('./sw.js?v=21', { updateViaCache: 'none' })
+          .register('./sw.js?v=22', { updateViaCache: 'none' })
           .catch(err => console.warn('[SW]', err));
       }
     }
@@ -1243,6 +1343,8 @@ ${commandCenter}
       $('#deleteTaskBtn').style.display = id ? 'inline-flex' : 'none';
       $('#fEvent').innerHTML = '<option value="">Không liên kết</option>' + db.events.map(e => `<option value="${e.id}">${esc(e.title)}</option>`).join('');
       $('#fEvent').value = t.eventId || '';
+      $('#fCalendar').innerHTML = calendarOptionsHTML(t.calendarId || DEFAULT_CALENDAR_ID);
+      $('#fCalendar').value = t.calendarId || DEFAULT_CALENDAR_ID;
       openModal('taskModal');
     }
     function saveTask() {
@@ -1280,7 +1382,8 @@ ${commandCenter}
         mission: $('#fMission').checked,
         notes: $('#fNotes').value,
         tags: $('#fTags').value.split(/\s+/).filter(Boolean).map(x => x.replace(/^#/, '')).filter(Boolean),
-        eventId: $('#fEvent').value || ''
+        eventId: $('#fEvent').value || '',
+        calendarId: $('#fCalendar').value || DEFAULT_CALENDAR_ID
       });
       if (t.status === 'done') t.doneAt = new Date().toISOString();
       if (!id) db.tasks.push(t);
@@ -1616,10 +1719,241 @@ ${commandCenter}
       toastUndo('Đã chia nhỏ thành 2 phần');
     }
     function deleteById(id, rerender = true) { pushUndo('Xoá task'); softDeleteTask(id); save(); if (rerender) render(); toastUndo('Đã xoá task') }
-    function renderCalendar() { const d = parseDate(selectedDate); const first = new Date(d.getFullYear(), d.getMonth(), 1); const start = new Date(first); start.setDate(first.getDate() - ((first.getDay() + 6) % 7)); let days = ''; for (let i = 0; i < 42; i++) { const x = new Date(start); x.setDate(start.getDate() + i); const fd = fmtDate(x); const tasks = dayTasks(fd); days += `<div class="day ${x.getMonth() !== d.getMonth() ? 'off' : ''} ${fd === selectedDate ? 'sel' : ''}" onclick="selectCalendarDay('${fd}')" ondblclick="openTask(null,{date:'${fd}'})"><div class="num">${x.getDate()}</div><div class="dots">${tasks.slice(0, 6).map(t => `<span class="dot" title="${esc(t.title)}" style="background:${t.status === 'done' ? 'var(--ok)' : t.status === 'stack' ? 'var(--warn)' : 'var(--brand2)'}"></span>`).join('')}</div><div class="small muted">${tasks.length ? `${tasks.filter(t => t.status === 'done').length}/${tasks.length} done` : ''}</div></div>` } const events = eventsUpcoming(); $('#calendar').innerHTML = `<div class="row" style="margin-bottom:16px"><button class="btn" onclick="openEvent()">+ Sự kiện</button><span class="pill">Click ngày để chọn · Double click để thêm task</span><button class="btn secondary" onclick="goTab('timeline')">Mở timeline ngày chọn</button></div><div class="calendar">${['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(x => `<div class="dow">${x}</div>`).join('')}${days}</div><div class="card" style="margin-top:16px"><h3>Sự kiện + thời gian còn lại</h3><table class="table"><tr><th>Sự kiện</th><th>Ngày</th><th>Còn</th><th>Plan</th></tr>${events.map(e => `<tr><td>${esc(e.title)}</td><td>${e.date}</td><td>${e.days} ngày</td><td><button class="btn sm secondary" onclick="addPlanTask('${e.id}')">+ task chuẩn bị</button></td></tr>`).join('')}</table></div>` }
-    function selectCalendarDay(d) { selectedDate = d; $('#selectedDate').value = d; render() }
-    function openEvent() { $('#eTitle').value = ''; $('#eDate').value = selectedDate; $('#eType').value = 'solar'; $('#eRecurring').value = 'yes'; $('#eNotes').value = ''; openModal('eventModal') }
-    function saveEvent() { const date = $('#eDate').value; if (!date) { toast('Vui lòng chọn ngày cho sự kiện.'); return; } const nowIso = new Date().toISOString(); db.events.push({ id: uid(), title: $('#eTitle').value || 'Sự kiện', type: $('#eType').value, date, recurring: $('#eRecurring').value === 'yes', notes: $('#eNotes').value, createdAt: nowIso, updatedAt: nowIso }); save(); closeModal('eventModal'); render() }
+    // Sự kiện rơi vào 1 ngày cụ thể (xét recurring theo tháng/ngày). Trả về list event
+    // ĐÃ lọc theo lịch đang bật visible.
+    function eventsOnDay(fd) {
+      const x = parseDate(fd);
+      return db.events.filter(e => {
+        if (isDeletedItem(e)) return false;
+        if (!isCalendarVisible(e.calendarId)) return false;
+        const ed = parseDate(e.date);
+        if (e.recurring) return ed.getMonth() === x.getMonth() && ed.getDate() === x.getDate();
+        return e.date === fd;
+      });
+    }
+    // ── View tuần/ngày: hằng số & helpers ────────────────────────────────────
+    const DOW_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+    const WEEK_START_HOUR = 6; // bắt đầu lưới giờ ở 06:00 cho gọn (item sớm hơn vẫn hiện ở đầu)
+    const WEEK_HOUR_H = 48;    // chiều cao mỗi giờ (px) trong view tuần/ngày
+    // Thứ Hai đầu tuần chứa ngày fd.
+    function weekStart(fd) { const x = parseDate(fd); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+    function addDays(date, n) { const x = new Date(date); x.setDate(x.getDate() + n); return x; }
+    function shiftSelectedDate(deltaDays) { selectedDate = fmtDate(addDays(parseDate(selectedDate), deltaDays)); miniCalMonth = ''; render(); }
+    function setCalView(view) { if (!['month', 'week', 'day'].includes(view)) return; calView = view; try { localStorage.setItem(CAL_VIEW_KEY, view); } catch { /* ignore */ } render(); }
+    // Task có giờ (start+end) trong ngày, đã lọc theo lịch đang bật.
+    function timedTasksOnDay(fd) {
+      return dayTasks(fd).filter(t => t.start && t.end && isCalendarVisible(t.calendarId));
+    }
+    function allDayItemsOnDay(fd) {
+      const tasks = dayTasks(fd).filter(t => (!t.start || !t.end) && isCalendarVisible(t.calendarId));
+      const events = eventsOnDay(fd);
+      return { tasks, events };
+    }
+    function calNavLabel() {
+      const d = parseDate(selectedDate);
+      if (calView === 'day') { return `${DOW_LABELS[(d.getDay() + 6) % 7]}, ${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`; }
+      if (calView === 'week') {
+        const ws = weekStart(selectedDate), we = addDays(ws, 6);
+        return `${ws.getDate()}/${ws.getMonth() + 1} – ${we.getDate()}/${we.getMonth() + 1}/${we.getFullYear()}`;
+      }
+      return `${d.getMonth() + 1}/${d.getFullYear()}`;
+    }
+
+    function renderCalendar() {
+      const events = eventsUpcoming();
+      const viewBtn = (id, label) => `<button class="btn sm ${calView === id ? '' : 'secondary'}" aria-pressed="${calView === id}" onclick="setCalView('${id}')">${label}</button>`;
+      const navStep = calView === 'month' ? 'month' : (calView === 'week' ? 'week' : 'day');
+      const body = calView === 'week' ? calWeekHTML() : calView === 'day' ? calDayHTML() : calMonthHTML();
+      const hint = calView === 'month'
+        ? 'Click ngày để chọn · Double click để thêm task'
+        : 'Click ô giờ trống để thêm task · Click sự kiện/task để mở';
+      $('#calendar').innerHTML = `
+        <div class="row" style="margin-bottom:16px;gap:10px;align-items:center;flex-wrap:wrap">
+          <div class="createMenu">
+            <button class="btn" onclick="toggleCreateMenu(event)">${uiIcon('plus')}Tạo</button>
+            <div class="createDropdown" id="createDropdown" hidden>
+              <button class="createItem" onclick="createFromMenu('event')">📅 Sự kiện</button>
+              <button class="createItem" onclick="createFromMenu('task')">✅ Việc cần làm</button>
+            </div>
+          </div>
+          <div class="calViewSwitch">${viewBtn('month', 'Tháng')}${viewBtn('week', 'Tuần')}${viewBtn('day', 'Ngày')}</div>
+          <div class="calNav">
+            <button class="iconBtn calNavBtn" title="Trước" onclick="calNavigate('${navStep}',-1)">‹</button>
+            <button class="btn sm secondary" onclick="calGoToday()">Hôm nay</button>
+            <button class="iconBtn calNavBtn" title="Sau" onclick="calNavigate('${navStep}',1)">›</button>
+            <span class="calNavLabel">${esc(calNavLabel())}</span>
+          </div>
+          <span class="pill">${hint}</span>
+          <button class="btn secondary" onclick="goTab('timeline')">Mở timeline ngày chọn</button>
+        </div>
+        <div class="calMain">
+          <div class="calLeft">
+            ${body}
+            <div class="card" style="margin-top:16px"><h3>Sự kiện + thời gian còn lại</h3><table class="table"><tr><th>Sự kiện</th><th>Ngày</th><th>Còn</th><th>Plan</th></tr>${events.map(e => `<tr><td>${esc(calendarIcon(e.calendarId))} ${esc(e.title)}</td><td>${e.date}</td><td>${e.days} ngày</td><td><button class="btn sm secondary" onclick="addPlanTask('${e.id}')">+ task chuẩn bị</button></td></tr>`).join('')}</table></div>
+          </div>
+          <aside class="calSide">${miniCalendarHTML()}${myCalendarsPanelHTML()}</aside>
+        </div>`;
+    }
+    // Điều hướng theo bước của view hiện tại.
+    function calNavigate(step, dir) {
+      if (step === 'month') { const d = parseDate(selectedDate); selectedDate = fmtDate(new Date(d.getFullYear(), d.getMonth() + dir, Math.min(d.getDate(), 28))); miniCalMonth = ''; render(); }
+      else if (step === 'week') shiftSelectedDate(7 * dir);
+      else shiftSelectedDate(dir);
+    }
+    function calGoToday() { selectedDate = fmtDate(new Date()); $('#selectedDate').value = selectedDate; miniCalMonth = ''; render(); }
+
+    // ── VIEW THÁNG (giữ nguyên hành vi cũ) ────────────────────────────────────
+    function calMonthHTML() {
+      const d = parseDate(selectedDate);
+      const first = new Date(d.getFullYear(), d.getMonth(), 1);
+      const start = new Date(first);
+      start.setDate(first.getDate() - ((first.getDay() + 6) % 7));
+      let days = '';
+      for (let i = 0; i < 42; i++) {
+        const x = new Date(start); x.setDate(start.getDate() + i);
+        const fd = fmtDate(x);
+        const tasks = dayTasks(fd).filter(t => isCalendarVisible(t.calendarId));
+        const dayEvents = eventsOnDay(fd);
+        const eventDots = dayEvents.slice(0, 4).map(e => `<span class="dot" title="${esc(e.title)}" style="background:${calendarColor(e.calendarId)}"></span>`).join('');
+        const taskDots = tasks.slice(0, 6).map(t => `<span class="dot" title="${esc(t.title)}" style="background:${t.calendarId ? calendarColor(t.calendarId) : (t.status === 'done' ? 'var(--ok)' : t.status === 'stack' ? 'var(--warn)' : 'var(--brand2)')}"></span>`).join('');
+        days += `<div class="day ${x.getMonth() !== d.getMonth() ? 'off' : ''} ${fd === selectedDate ? 'sel' : ''}" onclick="selectCalendarDay('${fd}')" ondblclick="openTask(null,{date:'${fd}'})"><div class="num">${x.getDate()}</div><div class="dots">${eventDots}${taskDots}</div><div class="small muted">${tasks.length ? `${tasks.filter(t => t.status === 'done').length}/${tasks.length} done` : ''}</div></div>`;
+      }
+      return `<div class="calendar">${DOW_LABELS.map(x => `<div class="dow">${x}</div>`).join('')}${days}</div>`;
+    }
+
+    // ── Khối thời gian (dùng chung cho view tuần & ngày) ──────────────────────
+    function timeBlockHTML(t) {
+      const s = minOf(t.start), e = minOf(t.end);
+      const top = Math.max(0, ((s - WEEK_START_HOUR * 60) / 60) * WEEK_HOUR_H);
+      const height = Math.max(20, ((e - s) / 60) * WEEK_HOUR_H - 2);
+      const color = t.calendarId ? calendarColor(t.calendarId) : (t.status === 'done' ? 'var(--ok)' : t.status === 'stack' ? 'var(--warn)' : 'var(--brand2)');
+      return `<div class="wkBlock ${t.status === 'done' ? 'done' : ''}" style="top:${top}px;height:${height}px;--cal:${color}" title="${esc(t.title)} · ${esc(t.start)}-${esc(t.end)}" onclick="event.stopPropagation();openTaskDetail('${t.id}')">
+        <div class="wkBlockName">${esc(t.title)}</div>
+        <div class="wkBlockTime">${esc(t.start)}-${esc(t.end)}</div>
+      </div>`;
+    }
+    function allDayChipsHTML(fd) {
+      const { tasks, events } = allDayItemsOnDay(fd);
+      const evChips = events.map(ev => `<span class="wkChip" style="--cal:${calendarColor(ev.calendarId)}" title="${esc(ev.title)}">${esc(calendarIcon(ev.calendarId))} ${esc(ev.title)}</span>`).join('');
+      const tkChips = tasks.map(t => `<span class="wkChip ${t.status === 'done' ? 'done' : ''}" style="--cal:${t.calendarId ? calendarColor(t.calendarId) : 'var(--brand2)'}" title="${esc(t.title)}" onclick="event.stopPropagation();openTaskDetail('${t.id}')">${esc(t.title)}</span>`).join('');
+      return evChips + tkChips;
+    }
+    // Cột giờ chung (nhãn 06:00..23:00).
+    function hourGutterHTML() {
+      let h = '';
+      for (let hr = WEEK_START_HOUR; hr < 24; hr++) h += `<div class="wkHourLabel" style="height:${WEEK_HOUR_H}px">${String(hr).padStart(2, '0')}:00</div>`;
+      return `<div class="wkGutter"><div class="wkAllDaySpacer">cả ngày</div><div class="wkGutterHours">${h}</div></div>`;
+    }
+    // Một cột ngày: dải all-day + lưới giờ với các block.
+    function dayColumnHTML(fd, withHeader) {
+      const today = fmtDate(new Date());
+      let grid = '';
+      for (let hr = WEEK_START_HOUR; hr < 24; hr++) grid += `<div class="wkCell" style="height:${WEEK_HOUR_H}px" onclick="quickCreateAt('${fd}',${hr})"></div>`;
+      const blocks = timedTasksOnDay(fd).map(timeBlockHTML).join('');
+      const header = withHeader
+        ? `<div class="wkColHead ${fd === today ? 'today' : ''} ${fd === selectedDate ? 'sel' : ''}" onclick="selectCalendarDay('${fd}')"><span class="wkDow">${DOW_LABELS[(parseDate(fd).getDay() + 6) % 7]}</span><span class="wkDate">${parseDate(fd).getDate()}</span></div>`
+        : '';
+      return `<div class="wkCol ${fd === selectedDate ? 'selCol' : ''}">
+        ${header}
+        <div class="wkAllDay">${allDayChipsHTML(fd)}</div>
+        <div class="wkGrid" style="height:${(24 - WEEK_START_HOUR) * WEEK_HOUR_H}px">${grid}${blocks}</div>
+      </div>`;
+    }
+
+    // ── VIEW TUẦN ─────────────────────────────────────────────────────────────
+    function calWeekHTML() {
+      const ws = weekStart(selectedDate);
+      let cols = '';
+      for (let i = 0; i < 7; i++) cols += dayColumnHTML(fmtDate(addDays(ws, i)), true);
+      return `<div class="wkScroll"><div class="wkView">${hourGutterHTML()}<div class="wkCols">${cols}</div></div></div>`;
+    }
+
+    // ── VIEW NGÀY ─────────────────────────────────────────────────────────────
+    function calDayHTML() {
+      return `<div class="wkScroll"><div class="wkView dayMode">${hourGutterHTML()}<div class="wkCols">${dayColumnHTML(selectedDate, false)}</div></div></div>`;
+    }
+    // Tạo nhanh task tại ô giờ trống.
+    function quickCreateAt(fd, hour) { openTask(null, { date: fd, start: timeOfMin(hour * 60), duration: 60 }); }
+    function myCalendarsPanelHTML() {
+      const rows = calendars().map(c => `
+        <li class="calRow">
+          <label class="calTick">
+            <input type="checkbox" ${c.visible !== false ? 'checked' : ''} onchange="toggleCalendarVisible('${esc(c.id)}')">
+            <span class="calBox" style="--cal:${c.color}"></span>
+          </label>
+          <span class="calIcon">${esc(c.icon)}</span>
+          <span class="calName" title="${esc(c.name)}">${esc(c.name)}</span>
+          <span class="calActions">
+            <button class="iconBtn" title="Sửa" onclick="editCalendar('${esc(c.id)}')">✎</button>
+            ${c.system ? '' : `<button class="iconBtn" title="Xóa" onclick="deleteCalendar('${esc(c.id)}')">✕</button>`}
+          </span>
+        </li>`).join('');
+      return `<div class="card calPanel"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="margin:0">Lịch của tôi</h3><button class="btn sm" onclick="addCalendar()">${uiIcon('plus')}</button></div><ul class="calList">${rows}</ul></div>`;
+    }
+    function selectCalendarDay(d) { selectedDate = d; $('#selectedDate').value = d; miniCalMonth = ''; render() }
+    // ── MINI-CALENDAR (panel phải) ────────────────────────────────────────────
+    function miniCalMonthDate() {
+      if (/^\d{4}-\d{2}$/.test(miniCalMonth)) { const [y, m] = miniCalMonth.split('-').map(Number); return new Date(y, m - 1, 1); }
+      const d = parseDate(selectedDate); return new Date(d.getFullYear(), d.getMonth(), 1);
+    }
+    function miniCalNavigate(dir) {
+      const base = miniCalMonthDate();
+      const next = new Date(base.getFullYear(), base.getMonth() + dir, 1);
+      miniCalMonth = `${next.getFullYear()}-${pad2(next.getMonth() + 1)}`;
+      render();
+    }
+    function miniDayHasItems(fd) {
+      if (eventsOnDay(fd).length) return true;
+      return dayTasks(fd).some(t => isCalendarVisible(t.calendarId));
+    }
+    function miniCalendarHTML() {
+      const first = miniCalMonthDate();
+      const start = new Date(first); start.setDate(first.getDate() - ((first.getDay() + 6) % 7));
+      const today = fmtDate(new Date());
+      let cells = '';
+      for (let i = 0; i < 42; i++) {
+        const x = addDays(start, i);
+        const fd = fmtDate(x);
+        const cls = [
+          'miniCell',
+          x.getMonth() !== first.getMonth() ? 'off' : '',
+          fd === today ? 'today' : '',
+          fd === selectedDate ? 'sel' : '',
+          miniDayHasItems(fd) ? 'has' : ''
+        ].filter(Boolean).join(' ');
+        cells += `<button class="${cls}" onclick="selectCalendarDay('${fd}')">${x.getDate()}</button>`;
+      }
+      const title = `${first.getMonth() + 1}/${first.getFullYear()}`;
+      return `<div class="card miniCal">
+        <div class="miniHead">
+          <button class="iconBtn" title="Tháng trước" onclick="miniCalNavigate(-1)">‹</button>
+          <span class="miniTitle">${esc(title)}</span>
+          <button class="iconBtn" title="Tháng sau" onclick="miniCalNavigate(1)">›</button>
+        </div>
+        <div class="miniGrid">${DOW_LABELS.map(x => `<span class="miniDow">${x[1]}</span>`).join('')}${cells}</div>
+      </div>`;
+    }
+    // Menu "+ Tạo"
+    function toggleCreateMenu(ev) {
+      if (ev) ev.stopPropagation();
+      const dd = $('#createDropdown');
+      if (!dd) return;
+      const willShow = dd.hidden;
+      dd.hidden = !willShow;
+      if (willShow) setTimeout(() => document.addEventListener('click', closeCreateMenuOnce), 0);
+    }
+    function closeCreateMenuOnce() {
+      const dd = $('#createDropdown');
+      if (dd) dd.hidden = true;
+      document.removeEventListener('click', closeCreateMenuOnce);
+    }
+    function createFromMenu(kind) {
+      closeCreateMenuOnce();
+      if (kind === 'task') openTask(null, { date: selectedDate });
+      else openEvent();
+    }
+    function openEvent() { $('#eTitle').value = ''; $('#eDate').value = selectedDate; $('#eType').value = 'solar'; $('#eRecurring').value = 'yes'; $('#eNotes').value = ''; const sel = $('#eCalendar'); if (sel) sel.innerHTML = calendarOptionsHTML(DEFAULT_CALENDAR_ID); openModal('eventModal') }
+    function saveEvent() { const date = $('#eDate').value; if (!date) { toast('Vui lòng chọn ngày cho sự kiện.'); return; } const nowIso = new Date().toISOString(); const calSel = $('#eCalendar'); const calendarId = calSel?.value || DEFAULT_CALENDAR_ID; db.events.push({ id: uid(), title: $('#eTitle').value || 'Sự kiện', type: $('#eType').value, date, recurring: $('#eRecurring').value === 'yes', calendarId, notes: $('#eNotes').value, createdAt: nowIso, updatedAt: nowIso }); save(); closeModal('eventModal'); render() }
     function eventsUpcoming() {
       const now = startOfDay(new Date());
       return db.events
@@ -1896,5 +2230,5 @@ ${commandCenter}
     }
     function notify(title, body) { if (('Notification' in window) && db.settings.notifications && Notification.permission === 'granted') new Notification(title, { body }); else toast(title + ' - ' + body) }
     // SW registered once in init() — no duplicate here
-    window.openTask = openTask; window.openTaskDetail = openTaskDetail; window.closeModal = closeModal; window.quickDur = quickDur; window.quickAdd = quickAdd; window.autoSchedule = autoSchedule; window.timelineClick = timelineClick; window.markDone = markDone; window.startFocus = startFocus; window.moveToStack = moveToStack; window.openTriage = openTriage; window.doToday = doToday; window.scheduleDebt = scheduleDebt; window.splitTask = splitTask; window.deleteById = deleteById; window.triageAction = triageAction; window.renderTriage = renderTriage; window.pauseFocus = pauseFocus; window.resumeFocus = resumeFocus; window.toggleFocusTimer = toggleFocusTimer; window.completeFocus = completeFocus; window.closeFocusReview = closeFocusReview; window.focusReviewDone = focusReviewDone; window.focusReviewSave = focusReviewSave; window.focusReviewNextAction = focusReviewNextAction; window.focusReviewStack = focusReviewStack; window.addFocus = addFocus; window.setFocusPreset = setFocusPreset; window.selectCalendarDay = selectCalendarDay; window.openEvent = openEvent; window.addPlanTask = addPlanTask; window.saveSettings = saveSettings; window.setTheme = setTheme; window.setBackgroundPreset = setBackgroundPreset; window.uploadBackgroundPrompt = uploadBackgroundPrompt; window.clearBackgroundImage = clearBackgroundImage; window.handleBackgroundUpload = handleBackgroundUpload; window.setAnalyticsPreview = setAnalyticsPreview; window.openAnalyticsDate = openAnalyticsDate; window.updateTaskFilter = updateTaskFilter; window.setDashboardMode = setDashboardMode; window.setSettingsSection = setSettingsSection; window.addWorkspaceProject = addWorkspaceProject; window.addWorkspaceGoal = addWorkspaceGoal; window.setGoalConfidence = setGoalConfidence; window.archiveWorkspaceGoal = archiveWorkspaceGoal; window.updateFlowSummary = updateFlowSummary; window.addFlowItem = addFlowItem; window.removeFlowItem = removeFlowItem; window.toggleFlowCheck = toggleFlowCheck; window.undoLast = undoLast; window.addStickyNote = addStickyNote; window.updateStickyNote = updateStickyNote; window.setStickyColor = setStickyColor; window.deleteStickyNote = deleteStickyNote; window.purgeExpiredCloudData = purgeExpiredCloudData; window.requestAccountDeletion = requestAccountDeletion; window.toast = toast; window.render = render; window.loginOrSyncHelp = loginOrSyncHelp; window.getTimelineDb = () => db; window.getTimelineDbSnapshot = getDbSnapshot;
+    window.openTask = openTask; window.openTaskDetail = openTaskDetail; window.closeModal = closeModal; window.quickDur = quickDur; window.quickAdd = quickAdd; window.autoSchedule = autoSchedule; window.timelineClick = timelineClick; window.markDone = markDone; window.startFocus = startFocus; window.moveToStack = moveToStack; window.openTriage = openTriage; window.doToday = doToday; window.scheduleDebt = scheduleDebt; window.splitTask = splitTask; window.deleteById = deleteById; window.triageAction = triageAction; window.renderTriage = renderTriage; window.pauseFocus = pauseFocus; window.resumeFocus = resumeFocus; window.toggleFocusTimer = toggleFocusTimer; window.completeFocus = completeFocus; window.closeFocusReview = closeFocusReview; window.focusReviewDone = focusReviewDone; window.focusReviewSave = focusReviewSave; window.focusReviewNextAction = focusReviewNextAction; window.focusReviewStack = focusReviewStack; window.addFocus = addFocus; window.setFocusPreset = setFocusPreset; window.selectCalendarDay = selectCalendarDay; window.openEvent = openEvent; window.addPlanTask = addPlanTask; window.toggleCalendarVisible = toggleCalendarVisible; window.addCalendar = addCalendar; window.editCalendar = editCalendar; window.deleteCalendar = deleteCalendar; window.toggleCreateMenu = toggleCreateMenu; window.createFromMenu = createFromMenu; window.setCalView = setCalView; window.calNavigate = calNavigate; window.calGoToday = calGoToday; window.miniCalNavigate = miniCalNavigate; window.quickCreateAt = quickCreateAt; window.saveSettings = saveSettings; window.setTheme = setTheme; window.setBackgroundPreset = setBackgroundPreset; window.uploadBackgroundPrompt = uploadBackgroundPrompt; window.clearBackgroundImage = clearBackgroundImage; window.handleBackgroundUpload = handleBackgroundUpload; window.setAnalyticsPreview = setAnalyticsPreview; window.openAnalyticsDate = openAnalyticsDate; window.updateTaskFilter = updateTaskFilter; window.setDashboardMode = setDashboardMode; window.setSettingsSection = setSettingsSection; window.addWorkspaceProject = addWorkspaceProject; window.addWorkspaceGoal = addWorkspaceGoal; window.setGoalConfidence = setGoalConfidence; window.archiveWorkspaceGoal = archiveWorkspaceGoal; window.updateFlowSummary = updateFlowSummary; window.addFlowItem = addFlowItem; window.removeFlowItem = removeFlowItem; window.toggleFlowCheck = toggleFlowCheck; window.undoLast = undoLast; window.addStickyNote = addStickyNote; window.updateStickyNote = updateStickyNote; window.setStickyColor = setStickyColor; window.deleteStickyNote = deleteStickyNote; window.purgeExpiredCloudData = purgeExpiredCloudData; window.requestAccountDeletion = requestAccountDeletion; window.toast = toast; window.render = render; window.loginOrSyncHelp = loginOrSyncHelp; window.getTimelineDb = () => db; window.getTimelineDbSnapshot = getDbSnapshot;
     init();
