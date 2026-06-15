@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 
 const LS_KEY = 'timeline_focus_product_final_v6';
-const IDB_NAME = 'timeline_focus_idb_v1';
+const IDB_PREFIX = 'timeline_focus_idb_v2_';
 
 async function waitForApp(page) {
   await page.waitForFunction(() => typeof window.openTask === 'function', { timeout: 10000 });
@@ -13,7 +13,8 @@ async function waitForStorage(page) {
 
 // Đọc thẳng IndexedDB từ trang (không phụ thuộc Dexie API)
 async function readIdbTable(page, table) {
-  return page.evaluate(({ dbName, tableName }) => new Promise((resolve, reject) => {
+  return page.evaluate(({ dbPrefix, tableName }) => new Promise((resolve, reject) => {
+    const dbName = `${dbPrefix}${window.timelineStorageScope || 'anonymous'}`;
     const req = indexedDB.open(dbName);
     req.onerror = () => reject(req.error);
     req.onsuccess = () => {
@@ -24,7 +25,7 @@ async function readIdbTable(page, table) {
       getAll.onsuccess = () => { db.close(); resolve(getAll.result); };
       getAll.onerror = () => { db.close(); reject(getAll.error); };
     };
-  }), { dbName: IDB_NAME, tableName: table });
+  }), { dbPrefix: IDB_PREFIX, tableName: table });
 }
 
 test('migrates legacy localStorage data into IndexedDB on first run', async ({ page }, testInfo) => {

@@ -31,7 +31,6 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   initializeFirestore,
-  persistentLocalCache,
   memoryLocalCache,
   doc,
   collection,
@@ -82,6 +81,9 @@ let dbFire = null;
 let unsubscribers = [];
 let lastSyncedLocalDb = null;
 let pushDebounceTimer = null;
+let queuedPushDb = null;
+let pushLoopPromise = null;
+let sessionGeneration = 0;
 const PUSH_DEBOUNCE_MS = 800;
 // Auto-retry khi push lỗi (mạng chập chờn): nếu user không thao tác tiếp, data
 // sẽ kẹt unsynced tới lần edit sau. Thử lại có giới hạn + exponential backoff.
@@ -113,7 +115,7 @@ window.addEventListener('online', () => {
       retryCount = 0;
       setSyncStatus('syncing');
       const localDb = getLocalDbSnapshot();
-      if (localDb) actuallyPush(localDb);
+      if (localDb) enqueuePush(localDb);
     } else {
       setSyncStatus(auth?.currentUser ? 'syncing' : 'signed-out');
     }
@@ -155,12 +157,9 @@ export function initSyncEngine(config = DEFAULT_CONFIG) {
     authPersistenceReady = setPersistence(auth, browserLocalPersistence).catch((persistErr) => {
       console.warn('[sync] Auth persistence setup failed, using browser default:', persistErr);
     });
-    try {
-      dbFire = initializeFirestore(app, { localCache: persistentLocalCache() });
-    } catch (persistErr) {
-      console.warn('[sync] Persistent cache unavailable, using memory cache:', persistErr.message);
-      dbFire = initializeFirestore(app, { localCache: memoryLocalCache() });
-    }
+    // App data is persisted in our UID-scoped IndexedDB. Keeping Firestore's
+    // own persistent cache would leave prior-account documents on shared devices.
+    dbFire = initializeFirestore(app, { localCache: memoryLocalCache() });
 
     window.dbFire = dbFire;
     window.auth = auth;
@@ -272,6 +271,14 @@ async function handleAuthStateChange(user) {
     activeSessionUid = null;
     sessionStartPromise = null;
     window.currentUserId = null;
+    try {
+      await window.timelineStorageReady;
+      if (typeof window.switchTimelineStorageScope === 'function') {
+        await window.switchTimelineStorageScope(null);
+      }
+    } catch (err) {
+      console.warn('[sync] Failed to switch to anonymous storage:', err);
+    }
     if (btn) {
       btn.innerHTML = '&#128273; Đăng nhập Đồng bộ';
       btn.onclick = window.firebaseLogin;
@@ -302,6 +309,21 @@ async function startUserSession(user) {
   applySignedInUi(user, { toast: true });
 
   setSyncStatus('syncing');
+  const generation = sessionGeneration;
+
+  try {
+    await window.timelineStorageReady;
+    if (activeSessionUid !== user.uid || generation !== sessionGeneration) return;
+    if (typeof window.switchTimelineStorageScope === 'function') {
+      await window.switchTimelineStorageScope(user.uid);
+    }
+    if (activeSessionUid !== user.uid || generation !== sessionGeneration) return;
+  } catch (err) {
+    console.error('[sync] Local storage scope switch failed:', err);
+    setSyncStatus('error', err.message || String(err));
+    showToast('❌ Không thể mở vùng dữ liệu của tài khoản này.');
+    return;
+  }
 
   // Migration
   try {
@@ -331,8 +353,10 @@ async function startUserSession(user) {
 }
 
 function cleanupSyncSession() {
+  sessionGeneration++;
   if (pushDebounceTimer) { clearTimeout(pushDebounceTimer); pushDebounceTimer = null; }
   if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+  queuedPushDb = null;
   retryCount = 0;
   unsubscribers.forEach((u) => { try { u(); } catch {} });
   unsubscribers = [];
@@ -363,6 +387,14 @@ function applySignedInUi(user, opts = {}) {
 // SUBSCRIPTION
 // ════════════════════════════════════════════════════════════════════════════
 function subscribeToCollections(uid) {
+  // Capture the session identity at subscription time. Mọi snapshot callback
+  // in-flight của session này phải tự kiểm tra: nếu generation đã tăng (do
+  // cleanupSyncSession của user mới) hoặc uid không còn là user hiện hành thì
+  // bỏ qua — tránh callback session cũ set lại initialSyncDone / push nhầm
+  // account (BLOCKER A).
+  const sessionGen = sessionGeneration;
+  const isStaleSession = () => sessionGen !== sessionGeneration || window.currentUserId !== uid;
+
   const tasksRef = collection(dbFire, 'users', uid, 'tasks');
   const eventsRef = collection(dbFire, 'users', uid, 'events');
   const sessionsRef = collection(dbFire, 'users', uid, 'sessions');
@@ -381,6 +413,9 @@ function subscribeToCollections(uid) {
   const loadedSources = new Set();
 
   function onSourceSnapshot(source) {
+    // Guard: callback của session cũ không được tiếp tục apply/push sau khi
+    // user đã đổi (BLOCKER A).
+    if (isStaleSession()) return;
     if (initialSyncDone) {
       mergeAndApply();
       return;
@@ -396,6 +431,9 @@ function subscribeToCollections(uid) {
   }
 
   function mergeAndApply() {
+    // Guard lần hai ngay tại điểm ghi remote vào local + cập nhật baseline:
+    // chặn snapshot session cũ đẩy dữ liệu sai account (BLOCKER A).
+    if (isStaleSession()) return;
     const remoteDb = {
       tasks: [...remoteTasks.values()],
       events: [...remoteEvents.values()],
@@ -551,20 +589,44 @@ window.firebaseSync = (localDb) => {
   }
 
   if (pushDebounceTimer) clearTimeout(pushDebounceTimer);
+  const snapshot = deepClone(coerceDbShape(localDb));
   pushDebounceTimer = setTimeout(() => {
     pushDebounceTimer = null;
-    actuallyPush(localDb);
+    enqueuePush(snapshot);
   }, PUSH_DEBOUNCE_MS);
 };
 
-async function actuallyPush(localDb) {
+function enqueuePush(localDb) {
+  if (!localDb || !window.currentUserId || !initialSyncDone) return;
+  queuedPushDb = deepClone(coerceDbShape(localDb));
+  if (pushLoopPromise) return;
+  const uid = window.currentUserId;
+  const generation = sessionGeneration;
+  pushLoopPromise = drainPushQueue(uid, generation).finally(() => {
+    pushLoopPromise = null;
+    if (queuedPushDb) {
+      enqueuePush(queuedPushDb);
+    }
+  });
+}
+
+async function drainPushQueue(uid, generation) {
+  while (queuedPushDb && window.currentUserId === uid && generation === sessionGeneration) {
+    const snapshot = queuedPushDb;
+    queuedPushDb = null;
+    const succeeded = await actuallyPush(snapshot, uid, generation);
+    if (!succeeded) break;
+  }
+}
+
+async function actuallyPush(localDb, expectedUid = window.currentUserId, generation = sessionGeneration) {
   if (!window.currentUserId || !dbFire) return;
   // Hàng rào thứ hai: timer cũ có thể bắn sau khi đổi user/re-subscribe
-  if (!initialSyncDone) return;
+  if (!initialSyncDone || window.currentUserId !== expectedUid || generation !== sessionGeneration) return false;
 
   setSyncStatus('syncing');
 
-  const uid = window.currentUserId;
+  const uid = expectedUid;
   const current = coerceDbShape(localDb);
   const prev = lastSyncedLocalDb || coerceDbShape({});
 
@@ -592,21 +654,24 @@ async function actuallyPush(localDb) {
     if (writes.length === 0) {
       retryCount = 0;
       setSyncStatus('synced');
-      return;
+      return true;
     }
 
     await commitBatched(uid, writes);
+    if (window.currentUserId !== uid || generation !== sessionGeneration) return false;
 
     lastSyncedLocalDb = deepClone(current);
     retryCount = 0;
     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
     setSyncStatus('synced');
+    return true;
   } catch (err) {
     console.error('[sync] Push failed:', err);
     setSyncStatus('error', err.message);
     showToast('❌ Lỗi đồng bộ: ' + (err.message || err));
     if (window.Sentry) window.Sentry.captureException(err);
     scheduleRetry(uid);
+    return false;
   }
 }
 
@@ -625,7 +690,7 @@ function scheduleRetry(uid) {
     retryTimer = null;
     if (window.currentUserId !== uid || !initialSyncDone || !isOnline) return;
     const localDb = getLocalDbSnapshot();
-    if (localDb) actuallyPush(localDb);
+    if (localDb) enqueuePush(localDb);
   }, delay);
 }
 
@@ -688,6 +753,11 @@ async function commitBatched(uid, ops) {
 
       if (op.kind === 'softDelete') {
         const tombstone = {
+          // Phải có `id` khớp document id: nếu doc đích chưa tồn tại trên
+          // server, set(merge) tạo mới mà thiếu `id` → firestore rule
+          // hasMatchingId fail → cả batch fail → sync kẹt error vĩnh viễn
+          // (BLOCKER B).
+          id: docId,
           deletedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };

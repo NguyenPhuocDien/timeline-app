@@ -2,7 +2,13 @@
 // Môn       : Chuyên ngành | Bài: Timeline Focus App
 
 const $ = s => document.querySelector(s); const $$ = s => Array.from(document.querySelectorAll(s));
-    const KEY = 'timeline_focus_product_final_v6';
+    const LEGACY_KEY = 'timeline_focus_product_final_v6';
+    const ACTIVE_UID_KEY = 'timeline_focus_active_uid';
+    function storageKey() {
+      const activeUid = localStorage.getItem(ACTIVE_UID_KEY);
+      const fallbackScope = activeUid ? `user-${encodeURIComponent(activeUid)}` : 'anonymous';
+      return `${LEGACY_KEY}:${window.timelineStorageScope || fallbackScope}`;
+    }
     const tabs = [
       ['dashboard', 'Hôm nay'],
       ['timeline', 'Timeline'],
@@ -108,6 +114,14 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         render();
       }
     };
+    window.replaceDbFromStorage = function(idbData) {
+      db = Object.assign(defaultData(), coerceDbShape(idbData));
+      normalize();
+      persistLocal();
+      applyTheme(db.settings.theme);
+      applyBackground();
+      render();
+    };
     function uid() { return crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()) }
     function pad2(n) { return String(n).padStart(2, '0') }
     function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
@@ -172,6 +186,25 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       const status = typeof window.getSyncStatus === 'function' ? window.getSyncStatus() : null;
       const error = status?.error ? ` Lỗi hiện tại: ${status.error}` : '';
       toast(`Đồng bộ Firebase chưa sẵn sàng. Hãy kiểm tra mạng rồi thử lại.${error}`);
+    }
+    async function purgeExpiredCloudData() {
+      if (typeof window.firebasePurgeExpiredData !== 'function') {
+        toast('Công cụ dọn dữ liệu cloud chưa sẵn sàng.');
+        return;
+      }
+      await window.firebasePurgeExpiredData();
+    }
+    async function requestAccountDeletion() {
+      if (!window.currentUserId || typeof window.firebaseDeleteAccount !== 'function') {
+        toast('Bạn cần đăng nhập trước khi xóa tài khoản.');
+        return;
+      }
+      const confirmation = prompt('Thao tác này xóa vĩnh viễn dữ liệu cloud và dữ liệu local của tài khoản. Nhập XOA để tiếp tục:');
+      if (confirmation !== 'XOA') {
+        toast('Đã hủy xóa tài khoản.');
+        return;
+      }
+      await window.firebaseDeleteAccount();
     }
     function pushUndo(label) { undoStack.push({ label, db: cloneDb(), selectedDate }); if (undoStack.length > 20) undoStack.shift(); }
     function undoLast() { const item = undoStack.pop(); if (!item) return; db = item.db; selectedDate = item.selectedDate || selectedDate; normalize(); save(); render(); toast(`Đã hoàn tác: ${item.label}`) }
@@ -373,6 +406,20 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       }
       return [...out, ...seedByKey.values()];
     }
+    function mergeReviews(localReviews = {}, remoteReviews = {}) {
+      const merged = {};
+      const keys = new Set([...Object.keys(localReviews), ...Object.keys(remoteReviews)]);
+      keys.forEach(key => {
+        const local = localReviews[key];
+        const remote = remoteReviews[key];
+        if (local == null) { merged[key] = remote; return; }
+        if (remote == null) { merged[key] = local; return; }
+        const localStamp = newestStamp(local);
+        const remoteStamp = newestStamp(remote);
+        merged[key] = localStamp > remoteStamp ? local : remote;
+      });
+      return merged;
+    }
     function mergeDbStates(localSource = {}, remoteSource = {}) {
       const localDb = coerceDbShape(localSource);
       const remoteDb = coerceDbShape(remoteSource);
@@ -386,7 +433,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         settings: localNewer
           ? Object.assign({}, remoteDb.settings, localDb.settings)
           : Object.assign({}, localDb.settings, remoteDb.settings),
-        reviews: Object.assign({}, remoteDb.reviews, localDb.reviews)
+        reviews: mergeReviews(localDb.reviews, remoteDb.reviews)
       };
       // Keep heavy background data local-only to avoid Firestore size issues.
       merged.settings.backgroundImage = localDb.settings.backgroundImage || '';
@@ -401,13 +448,23 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       copy.settings.backgroundPreset = 'none';
       return copy;
     }
-    function load() { try { return Object.assign(defaultData(), JSON.parse(localStorage.getItem(KEY) || '{}')) } catch (e) { return defaultData() } }
+    function load() {
+      try {
+        const scoped = localStorage.getItem(storageKey());
+        const legacy = localStorage.getItem(LEGACY_KEY);
+        return Object.assign(defaultData(), JSON.parse(scoped || legacy || '{}'));
+      } catch (e) {
+        return defaultData();
+      }
+    }
     // localStorage giờ chỉ là boot-cache: khi IndexedDB hoạt động, không lưu ảnh nền base64 vào đây nữa.
-    function persistLocal() {
-      const payload = (window.idbActive && db.settings.backgroundImage)
-        ? { ...db, settings: { ...db.settings, backgroundImage: '' } }
-        : db;
-      localStorage.setItem(KEY, JSON.stringify(payload));
+    function bootCachePayload(source = db) {
+      return (window.idbActive && source.settings.backgroundImage)
+        ? { ...source, settings: { ...source.settings, backgroundImage: '' } }
+        : source;
+    }
+    function persistLocal(payloadOverride = null) {
+      localStorage.setItem(storageKey(), JSON.stringify(payloadOverride || bootCachePayload()));
     }
     function save() {
       try {
@@ -418,23 +475,16 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         // QuotaExceededError — warn user
         if (e.name === 'QuotaExceededError' || e.code === 22) {
           console.warn('[TL] localStorage quota exceeded, attempting cleanup...');
-          // Xóa logs cũ để giải phóng space
-          const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 90);
-          let freed = 0;
-          db.tasks.forEach(t => {
-            if (t.flow && t.flow.logs && t.flow.logs.length > 10) {
-              freed += t.flow.logs.length - 10;
-              t.flow.logs = t.flow.logs.slice(-10);
-            }
+          const compact = JSON.parse(JSON.stringify(bootCachePayload()));
+          compact.tasks.forEach(t => {
+            if (t.flow?.logs?.length > 10) t.flow.logs = t.flow.logs.slice(-10);
           });
-          if (db.sessions && db.sessions.length > 500) {
-            freed += db.sessions.length - 500;
-            db.sessions = db.sessions.slice(-500);
-          }
-          try { persistLocal(); }
+          if (compact.sessions?.length > 500) compact.sessions = compact.sessions.slice(-500);
+          try { persistLocal(compact); }
           catch (e2) { toast('⚠️ Bộ nhớ đầy! Hãy xuất dữ liệu rồi dọn bớt logs cũ.', { label: 'Xuất dữ liệu', fn: 'exportData()' }); }
           if (window.idbSaveAll) window.idbSaveAll(db);
-          if (freed > 0) toast(`Đã tự dọn ${freed} mục logs cũ để tiết kiệm bộ nhớ.`);
+          if (window.firebaseSync) window.firebaseSync(db);
+          toast('Đã thu gọn boot-cache; dữ liệu đầy đủ vẫn được giữ trong IndexedDB.');
         }
       }
     }
@@ -500,16 +550,19 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
     // Sanitize field theo kiểu/pattern — dữ liệu có thể đến từ import JSON hoặc Firestore
     // sync nên KHÔNG được tin tưởng; các giá trị này được nội suy thẳng vào HTML khi render.
     const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
-    function safeId(v) { const s = String(v ?? ''); return s && s.length <= 100 && !/['"<>&\\]/.test(s) ? s : uid() }
+    function safeId(v) { const s = String(v ?? ''); return s && s.length <= 100 && !/['"<>&\\/]/.test(s) ? s : uid() }
     function safeDate(v, fallback = '') { return DATE_RE.test(String(v ?? '')) ? String(v) : fallback }
     function safeTime(v) { return TIME_RE.test(String(v ?? '')) ? String(v) : '' }
     function safeStr(v) { return typeof v === 'string' ? v : (v == null ? '' : String(v)) }
+    // deadline đổi nghĩa từ NGÀY ("YYYY-MM-DD", định dạng cũ) sang GIỜ ("HH:MM", mới).
+    // Chấp nhận & GIỮ LẠI cả 2 để không xóa trắng dữ liệu task cũ; chỉ loại bỏ rác.
+    function safeDeadline(v) { const s = String(v ?? ''); return (TIME_RE.test(s) || DATE_RE.test(s)) ? s : '' }
     function sanitizeTaskFields(t) {
       t.id = safeId(t.id);
       t.title = safeStr(t.title);
       t.date = safeDate(t.date, fmtDate(new Date()));
       t.start = safeTime(t.start); t.end = safeTime(t.end);
-      t.deadline = safeDate(t.deadline, '');
+      t.deadline = safeDeadline(t.deadline);
       t.duration = clamp(Number(t.duration) || 60, 1, 1440);
       t.priority = ['high', 'medium', 'low'].includes(t.priority) ? t.priority : 'medium';
       if (!['todo', 'doing', 'done', 'deferred', 'stack', 'deleted'].includes(t.status)) t.status = '';
@@ -592,6 +645,14 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       bind();
       render();
       updateNetworkStatus();
+      const requestedTab = location.hash.replace(/^#/, '');
+      if (tabs.some(([id]) => id === requestedTab)) {
+        currentTab = requestedTab;
+        render();
+      }
+      if (new URLSearchParams(location.search).get('action') === 'new-task') {
+        setTimeout(() => openTask(), 0);
+      }
       window.addEventListener('online', updateNetworkStatus);
       window.addEventListener('offline', updateNetworkStatus);
       if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (db.settings.theme === 'system') applyTheme('system') });
@@ -614,7 +675,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       // Register SW
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker
-          .register('./sw.js?v=20', { updateViaCache: 'none' })
+          .register('./sw.js?v=21', { updateViaCache: 'none' })
           .catch(err => console.warn('[SW]', err));
       }
     }
@@ -821,7 +882,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         <button class="cockpitCard" onclick="${nextTask ? `openTaskDetail('${nextTask.id}')` : `openTask()`}">
           <span class="eyebrow">Next</span>
           <strong>${nextTask ? esc(nextTask.title) : 'Tạo việc tiếp theo'}</strong>
-          <p>${nextTask ? `${projectName(nextTask.projectId)} · ${nextTask.impact || 'medium'} impact` : 'Chưa có task mở cho hôm nay.'}</p>
+          <p>${nextTask ? `${esc(projectName(nextTask.projectId))} · ${nextTask.impact || 'medium'} impact` : 'Chưa có task mở cho hôm nay.'}</p>
         </button>
         <button class="cockpitCard risk" onclick="goTab('debt')">
           <span class="eyebrow">Risk</span>
@@ -855,7 +916,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         <div class="opsGrid">
           <div class="card"><h3>Rủi ro cần xử lý</h3><div class="riskList">${risks.map(r => `<div class="riskItem">${esc(r)}</div>`).join('')}</div></div>
           <div class="card"><h3>Project trong kỳ</h3>${projects.length ? projects.map(({ project, progress }) => `<div class="progressRow"><div><b>${esc(project.name)}</b><div class="small muted">${progress.done}/${progress.tasks.length} done, ${progress.open} open</div></div><span class="metricBadge ${progress.pct >= 70 ? 'ok' : progress.pct < 35 ? 'warn' : ''}">${progress.pct}%</span></div>`).join('') : '<div class="muted">Chưa có task gắn project trong kỳ.</div>'}</div>
-          <div class="card"><h3>Goal cá nhân</h3>${goals.length ? goals.map(({ goal, progress }) => `<div class="progressRow"><div><b>${esc(goal.title)}</b><div class="small muted">${projectName(goal.projectId)}${goal.targetDate ? `, target ${goal.targetDate}` : ''}</div><div class="trendBar"><i style="width:${progress.pct}%"></i></div></div><span class="metricBadge ${goal.confidence === 'on-track' ? 'ok' : goal.confidence === 'off-track' ? 'warn' : ''}">${progress.pct}%</span></div>`).join('') : '<div class="muted">Chưa có goal. Tạo goal trong Settings để gắn task vào mục tiêu.</div>'}</div>
+          <div class="card"><h3>Goal cá nhân</h3>${goals.length ? goals.map(({ goal, progress }) => `<div class="progressRow"><div><b>${esc(goal.title)}</b><div class="small muted">${esc(projectName(goal.projectId))}${goal.targetDate ? `, target ${goal.targetDate}` : ''}</div><div class="trendBar"><i style="width:${progress.pct}%"></i></div></div><span class="metricBadge ${goal.confidence === 'on-track' ? 'ok' : goal.confidence === 'off-track' ? 'warn' : ''}">${progress.pct}%</span></div>`).join('') : '<div class="muted">Chưa có goal. Tạo goal trong Settings để gắn task vào mục tiêu.</div>'}</div>
         </div>
       </div>`;
     }
@@ -1192,6 +1253,10 @@ ${commandCenter}
       const durationValue = Number($('#fDuration').value) || 0;
       const startValue = $('#fStart').value;
       const endValue = $('#fEnd').value || deriveEndTime(startValue, durationValue);
+      // #fDeadline là input type="time" → không hiển thị được deadline NGÀY cũ ("YYYY-MM-DD"),
+      // nên khi sửa task cũ ô này rỗng. Giữ lại giá trị ngày cũ đã lưu thay vì ghi đè thành ''.
+      const deadlineInput = $('#fDeadline').value;
+      const deadlineValue = deadlineInput || (DATE_RE.test(String(t.deadline ?? '')) ? t.deadline : '');
       if (!taskDate) { toast('Vui lòng chọn ngày cho task.'); return }
       if (durationValue <= 0) { toast('Duration phải lớn hơn 0 phút.'); return }
       const missionCount = activeDayTasks(taskDate).filter(x => x.mission && x.id !== id).length;
@@ -1209,8 +1274,9 @@ ${commandCenter}
         energy: $('#fEnergy').value || 'normal',
         start: startValue,
         end: endValue,
-        deadline: $('#fDeadline').value,
+        deadline: deadlineValue,
         status: $('#fDone').checked ? 'done' : $('#fStatus').value,
+        done: $('#fDone').checked,
         mission: $('#fMission').checked,
         notes: $('#fNotes').value,
         tags: $('#fTags').value.split(/\s+/).filter(Boolean).map(x => x.replace(/^#/, '')).filter(Boolean),
@@ -1540,8 +1606,8 @@ ${commandCenter}
       const half = Math.max(15, Math.round((t.duration || 60) / 2));
       const part2dur = Math.max(15, (t.duration || 60) - half);
       const nowIso = new Date().toISOString();
-      db.tasks.push({ ...t, id: uid(), title: t.title + ' – phần 1', duration: half,    status: 'todo', date: selectedDate, stackType: '', stackedAt: '', reason: '', flow: defaultFlow(), createdAt: nowIso, updatedAt: nowIso });
-      db.tasks.push({ ...t, id: uid(), title: t.title + ' – phần 2', duration: part2dur, status: 'todo', date: selectedDate, stackType: '', stackedAt: '', reason: '', flow: defaultFlow(), createdAt: nowIso, updatedAt: nowIso });
+      db.tasks.push({ ...t, id: uid(), title: t.title + ' – phần 1', duration: half,    status: 'todo', done: false, doneAt: '', mission: false, date: selectedDate, start: '', end: '', stackType: '', stackedAt: '', reason: '', flow: defaultFlow(), createdAt: nowIso, updatedAt: nowIso });
+      db.tasks.push({ ...t, id: uid(), title: t.title + ' – phần 2', duration: part2dur, status: 'todo', done: false, doneAt: '', mission: false, date: selectedDate, start: '', end: '', stackType: '', stackedAt: '', reason: '', flow: defaultFlow(), createdAt: nowIso, updatedAt: nowIso });
       // Soft-delete thay vì hard-delete: merge giữa các thiết bị là union theo id,
       // hard-delete sẽ bị snapshot remote "hồi sinh" task gốc.
       softDeleteTask(id);
@@ -1728,7 +1794,7 @@ ${commandCenter}
       const conflictHtml = conflictCount ? `<div class="small warnText" style="margin:10px 0">⚠️ ${conflictCount} xung đột dữ liệu giữa các thiết bị đã được ghi lại — app giữ bản mới hơn, bản còn lại lưu an toàn tại đây.<div class="row" style="margin-top:8px"><button class="btn sm secondary" onclick="window.exportConflicts()">Tải bản sao xung đột</button><button class="btn sm secondary" onclick="window.clearConflicts()">Xóa nhật ký</button></div></div>` : '';
       const sections = {
         workspace: `<div class="card"><h3>Workspace cá nhân</h3>${workspaceSettingsHTML()}</div><div class="card"><h3>Lịch làm việc</h3><div class="form"><label>Giờ bắt đầu khả dụng<input class="input" type="time" id="setStart" value="${db.settings.availableStart}"></label><label>Giờ kết thúc khả dụng<input class="input" type="time" id="setEnd" value="${db.settings.availableEnd}"></label><label>Giới hạn việc chính hôm nay<input class="input" type="number" id="setMission" value="${db.settings.dailyMissionLimit}"></label><label>Ngày sinh (để xem cung hoàng đạo mỗi ngày)<input class="input" type="date" id="setBirth" value="${esc(workspace().birthDate || '')}"></label><div class="full"><button class="btn" onclick="saveSettings()">Lưu settings</button></div></div></div>`,
-        sync: `<div class="card syncCard"><div class="syncCardHead"><div><h3>Đồng bộ Đám mây</h3><div class="appearanceNote">Mỗi tài khoản Google là một workspace riêng. Đăng nhập cùng tài khoản trên nhiều thiết bị để cùng dùng một workspace cá nhân.</div></div><span class="metricBadge ${syncInfo.status === 'error' ? 'warn' : syncInfo.status === 'synced' ? 'ok' : ''}">${syncLabels[syncInfo.status] || syncInfo.status}</span></div>${syncInfo.error ? `<div class="small warnText" style="margin:10px 0">${esc(syncInfo.error)}</div>` : ''}${conflictHtml}<div class="row" style="margin-top:12px">${loginHtml}</div></div>`,
+        sync: `<div class="card syncCard"><div class="syncCardHead"><div><h3>Đồng bộ Đám mây</h3><div class="appearanceNote">Mỗi tài khoản Google là một workspace riêng. Đăng nhập cùng tài khoản trên nhiều thiết bị để cùng dùng một workspace cá nhân.</div></div><span class="metricBadge ${syncInfo.status === 'error' ? 'warn' : syncInfo.status === 'synced' ? 'ok' : ''}">${syncLabels[syncInfo.status] || syncInfo.status}</span></div>${syncInfo.error ? `<div class="small warnText" style="margin:10px 0">${esc(syncInfo.error)}</div>` : ''}${conflictHtml}<div class="row" style="margin-top:12px">${loginHtml}${window.currentUserId ? '<button class="btn secondary" onclick="purgeExpiredCloudData()">Dọn dữ liệu hết hạn</button>' : ''}</div></div>${window.currentUserId ? '<div class="card"><h3>Vùng nguy hiểm</h3><p class="small muted">Xóa tài khoản sẽ xóa vĩnh viễn dữ liệu cloud và dữ liệu local của tài khoản trên thiết bị này.</p><button class="btn bad" onclick="requestAccountDeletion()">Xóa tài khoản và dữ liệu</button></div>' : ''}`,
         appearance: `<div class="card"><h3>Appearance</h3><div class="appearanceNote" style="margin-bottom:12px">Bộ giao diện ưu tiên cảm giác editor/dashboard: rõ thông tin, ít nhiễu và dùng tốt trên nhiều thiết bị.</div>${themePickerHTML()}</div><div class="card"><h3>Background</h3><div class="appearanceNote" style="margin-bottom:12px">Bạn có thể dùng nền dựng sẵn hoặc upload ảnh riêng. Ảnh tải lên sẽ được nén trước khi lưu để app vẫn nhẹ.</div>${backgroundPickerHTML()}<div style="margin-top:14px" class="uploadRow"><button class="btn" onclick="uploadBackgroundPrompt()">Tải ảnh nền</button><button class="btn secondary" onclick="clearBackgroundImage()">Xóa ảnh cá nhân</button><span class="fileName">${esc(db.settings.backgroundName || 'Chưa có ảnh nền tùy chỉnh')}</span></div><input id="bgUpload" type="file" accept="image/*" hidden onchange="handleBackgroundUpload(event)"></div>`,
         data: `<div class="card"><h3>Offline app</h3><p>Trạng thái hiện tại: <b>${navigator.onLine ? 'Online' : 'Offline'}</b>. App cache bằng service worker và dữ liệu vẫn lưu trong trình duyệt.</p><p class="small muted">Bộ nhớ dữ liệu: <b>${window.idbActive ? 'IndexedDB (ổn định, dung lượng lớn)' : 'localStorage (chế độ dự phòng)'}</b></p><div class="row" style="margin-top:12px"><button class="btn secondary" onclick="exportData()">Xuất dữ liệu</button><button class="btn secondary" onclick="document.getElementById('importFile').click()">Nhập dữ liệu</button></div></div>`
       };
@@ -1830,5 +1896,5 @@ ${commandCenter}
     }
     function notify(title, body) { if (('Notification' in window) && db.settings.notifications && Notification.permission === 'granted') new Notification(title, { body }); else toast(title + ' - ' + body) }
     // SW registered once in init() — no duplicate here
-    window.openTask = openTask; window.openTaskDetail = openTaskDetail; window.closeModal = closeModal; window.quickDur = quickDur; window.quickAdd = quickAdd; window.autoSchedule = autoSchedule; window.timelineClick = timelineClick; window.markDone = markDone; window.startFocus = startFocus; window.moveToStack = moveToStack; window.openTriage = openTriage; window.doToday = doToday; window.scheduleDebt = scheduleDebt; window.splitTask = splitTask; window.deleteById = deleteById; window.triageAction = triageAction; window.renderTriage = renderTriage; window.pauseFocus = pauseFocus; window.resumeFocus = resumeFocus; window.toggleFocusTimer = toggleFocusTimer; window.completeFocus = completeFocus; window.closeFocusReview = closeFocusReview; window.focusReviewDone = focusReviewDone; window.focusReviewSave = focusReviewSave; window.focusReviewNextAction = focusReviewNextAction; window.focusReviewStack = focusReviewStack; window.addFocus = addFocus; window.setFocusPreset = setFocusPreset; window.selectCalendarDay = selectCalendarDay; window.openEvent = openEvent; window.addPlanTask = addPlanTask; window.saveSettings = saveSettings; window.setTheme = setTheme; window.setBackgroundPreset = setBackgroundPreset; window.uploadBackgroundPrompt = uploadBackgroundPrompt; window.clearBackgroundImage = clearBackgroundImage; window.handleBackgroundUpload = handleBackgroundUpload; window.setAnalyticsPreview = setAnalyticsPreview; window.openAnalyticsDate = openAnalyticsDate; window.updateTaskFilter = updateTaskFilter; window.setDashboardMode = setDashboardMode; window.setSettingsSection = setSettingsSection; window.addWorkspaceProject = addWorkspaceProject; window.addWorkspaceGoal = addWorkspaceGoal; window.setGoalConfidence = setGoalConfidence; window.archiveWorkspaceGoal = archiveWorkspaceGoal; window.updateFlowSummary = updateFlowSummary; window.addFlowItem = addFlowItem; window.removeFlowItem = removeFlowItem; window.toggleFlowCheck = toggleFlowCheck; window.undoLast = undoLast; window.addStickyNote = addStickyNote; window.updateStickyNote = updateStickyNote; window.setStickyColor = setStickyColor; window.deleteStickyNote = deleteStickyNote; window.toast = toast; window.render = render; window.loginOrSyncHelp = loginOrSyncHelp; window.getTimelineDb = () => db; window.getTimelineDbSnapshot = getDbSnapshot;
+    window.openTask = openTask; window.openTaskDetail = openTaskDetail; window.closeModal = closeModal; window.quickDur = quickDur; window.quickAdd = quickAdd; window.autoSchedule = autoSchedule; window.timelineClick = timelineClick; window.markDone = markDone; window.startFocus = startFocus; window.moveToStack = moveToStack; window.openTriage = openTriage; window.doToday = doToday; window.scheduleDebt = scheduleDebt; window.splitTask = splitTask; window.deleteById = deleteById; window.triageAction = triageAction; window.renderTriage = renderTriage; window.pauseFocus = pauseFocus; window.resumeFocus = resumeFocus; window.toggleFocusTimer = toggleFocusTimer; window.completeFocus = completeFocus; window.closeFocusReview = closeFocusReview; window.focusReviewDone = focusReviewDone; window.focusReviewSave = focusReviewSave; window.focusReviewNextAction = focusReviewNextAction; window.focusReviewStack = focusReviewStack; window.addFocus = addFocus; window.setFocusPreset = setFocusPreset; window.selectCalendarDay = selectCalendarDay; window.openEvent = openEvent; window.addPlanTask = addPlanTask; window.saveSettings = saveSettings; window.setTheme = setTheme; window.setBackgroundPreset = setBackgroundPreset; window.uploadBackgroundPrompt = uploadBackgroundPrompt; window.clearBackgroundImage = clearBackgroundImage; window.handleBackgroundUpload = handleBackgroundUpload; window.setAnalyticsPreview = setAnalyticsPreview; window.openAnalyticsDate = openAnalyticsDate; window.updateTaskFilter = updateTaskFilter; window.setDashboardMode = setDashboardMode; window.setSettingsSection = setSettingsSection; window.addWorkspaceProject = addWorkspaceProject; window.addWorkspaceGoal = addWorkspaceGoal; window.setGoalConfidence = setGoalConfidence; window.archiveWorkspaceGoal = archiveWorkspaceGoal; window.updateFlowSummary = updateFlowSummary; window.addFlowItem = addFlowItem; window.removeFlowItem = removeFlowItem; window.toggleFlowCheck = toggleFlowCheck; window.undoLast = undoLast; window.addStickyNote = addStickyNote; window.updateStickyNote = updateStickyNote; window.setStickyColor = setStickyColor; window.deleteStickyNote = deleteStickyNote; window.purgeExpiredCloudData = purgeExpiredCloudData; window.requestAccountDeletion = requestAccountDeletion; window.toast = toast; window.render = render; window.loginOrSyncHelp = loginOrSyncHelp; window.getTimelineDb = () => db; window.getTimelineDbSnapshot = getDbSnapshot;
     init();

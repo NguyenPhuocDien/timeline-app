@@ -6,12 +6,76 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: Validate production release credentials (does not deploy)
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
-  validate:
+  static:
+    name: Static validation and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint, syntax, consistency, and unit tests
+        run: npm run validate
+
+      - name: Build static release artifact
+        run: npm run build
+
+      - name: Upload static release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+          if-no-files-found: error
+          retention-days: 14
+
+  firestore-emulator:
+    name: Firestore rules and migration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Firestore Emulator tests
+        run: npm run test:firebase
+
+  playwright:
+    name: Browser and offline cold-start
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -30,8 +94,54 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Verify static build
-        run: npm run build
-
-      - name: Run e2e tests
+      - name: Run Playwright tests
         run: npm run test:e2e
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: warn
+          retention-days: 14
+
+  release-gate:
+    name: Release gate (no production deploy)
+    if: github.event_name != 'pull_request'
+    needs:
+      - static
+      - firestore-emulator
+      - playwright
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download validated static artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+
+      - name: Validate release eligibility
+        env:
+          DEPLOY_PRODUCTION: ${{ inputs.deploy_production == true && 'true' || 'false' }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: npm run release:gate
+
+      - name: Confirm deployment policy
+        run: echo "Release gate complete. CI never runs a production deploy command."

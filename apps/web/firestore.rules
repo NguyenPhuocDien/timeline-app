@@ -1,26 +1,11 @@
 rules_version = '2';
 
-// =============================================================================
-// Timeline Focus — Firestore Security Rules (Phase B FIX)
-//
-// Sửa: focusSessions → sessions, thêm reviews collection
-//
-// App.js schema:
-//   db = { tasks, events, sessions, settings, reviews }
-//
-// Triết lý:
-//   1. Mỗi user CHỈ đọc/ghi data của chính mình
-//   2. Validate kiểu cơ bản để chống ghi rác
-//   3. Block hoàn toàn truy cập cross-user
-//
-// Deploy: firebase deploy --only firestore:rules
-// =============================================================================
+// Timeline Focus Firestore rules.
+// Data is private to /users/{uid}; hard deletes are allowed for owner-driven
+// account deletion and retention cleanup.
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ────── HELPERS ──────────────────────────────────────────────────────────
-
     function isSignedIn() {
       return request.auth != null;
     }
@@ -29,94 +14,114 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isString(v, maxLen) {
-      return v is string && v.size() <= maxLen;
+    function isString(value, maxLength) {
+      return value is string && value.size() <= maxLength;
     }
 
-    function isOptionalString(v, maxLen) {
-      return v == null || isString(v, maxLen);
+    function isOptionalString(value, maxLength) {
+      return value == null || isString(value, maxLength);
     }
 
-    // ────── ROOT USER DOC ────────────────────────────────────────────────────
+    function isOptionalDateValue(value) {
+      return value == null
+        || value is timestamp
+        || isString(value, 30);
+    }
+
+    function isValidRootUser(data) {
+      return data.keys().hasOnly([
+          'migrationVersion', 'migratedAt', 'lastSeenAt',
+          'displayName', 'email',
+          'db',
+          '_backup_v1', '_v1HadData', '_v1ItemCount',
+          '_migrationStartedAt', '_rolledBackAt'
+        ])
+        && (!('migrationVersion' in data)
+          || (data.migrationVersion is int
+            && data.migrationVersion >= 1
+            && data.migrationVersion <= 100))
+        && isOptionalDateValue(data.get('migratedAt', null))
+        && isOptionalDateValue(data.get('lastSeenAt', null))
+        && isOptionalString(data.get('displayName', null), 200)
+        && isOptionalString(data.get('email', null), 320)
+        && (!('db' in data) || data.db is map)
+        && (!('_backup_v1' in data) || data._backup_v1 is map)
+        && (!('_v1HadData' in data) || data._v1HadData is bool)
+        && (!('_v1ItemCount' in data)
+          || (data._v1ItemCount is int && data._v1ItemCount >= 0))
+        && isOptionalDateValue(data.get('_migrationStartedAt', null))
+        && isOptionalDateValue(data.get('_rolledBackAt', null));
+    }
+
+    function hasMatchingId(data, documentId) {
+      return data.id is string
+        && data.id == documentId
+        && data.id.size() > 0
+        && data.id.size() <= 100;
+    }
 
     match /users/{userId} {
       allow read: if isOwner(userId);
-
-      // Cho phép migrationVersion, migratedAt, _backup_v1, legacy .db field
       allow create, update: if isOwner(userId)
-        && request.resource.data.keys().hasOnly([
-            'migrationVersion', 'migratedAt', 'lastSeenAt',
-            'displayName', 'email',
-            'db',              // legacy schema v1 — giữ để rollback
-            '_backup_v1', '_v1HadData', '_v1ItemCount',
-            '_migrationStartedAt', '_rolledBackAt'
-          ]);
+        && isValidRootUser(request.resource.data);
+      allow delete: if isOwner(userId);
 
-      // Không cho hard delete user doc trực tiếp
-      allow delete: if false;
-
-      // ─── SETTINGS: 1 document duy nhất ────────────────────────────────────
       match /settings/{settingsId} {
         allow read: if isOwner(userId);
-        allow write: if isOwner(userId)
+        allow create, update: if isOwner(userId)
           && settingsId == 'main'
           && isValidSettings(request.resource.data);
-        allow delete: if false;
+        allow delete: if isOwner(userId);
       }
 
-      // ─── REVIEWS: 1 document map theo ngày ────────────────────────────────
       match /reviews/{reviewsId} {
         allow read: if isOwner(userId);
-        allow write: if isOwner(userId)
+        allow create, update: if isOwner(userId)
           && reviewsId == 'main'
           && isValidReviews(request.resource.data);
-        allow delete: if false;
+        allow delete: if isOwner(userId);
       }
 
-      // ─── TASKS ────────────────────────────────────────────────────────────
       match /tasks/{taskId} {
         allow read: if isOwner(userId);
-        allow create, update: if isOwner(userId) && isValidTask(request.resource.data);
+        allow create, update: if isOwner(userId)
+          && hasMatchingId(request.resource.data, taskId)
+          && isValidTask(request.resource.data);
         allow delete: if isOwner(userId);
       }
 
-      // ─── EVENTS ───────────────────────────────────────────────────────────
       match /events/{eventId} {
         allow read: if isOwner(userId);
-        allow create, update: if isOwner(userId) && isValidEvent(request.resource.data);
+        allow create, update: if isOwner(userId)
+          && hasMatchingId(request.resource.data, eventId)
+          && isValidEvent(request.resource.data);
         allow delete: if isOwner(userId);
       }
 
-      // ─── SESSIONS (KHÔNG phải focusSessions) ──────────────────────────────
       match /sessions/{sessionId} {
         allow read: if isOwner(userId);
-        allow create, update: if isOwner(userId) && isValidSession(request.resource.data);
+        allow create, update: if isOwner(userId)
+          && hasMatchingId(request.resource.data, sessionId)
+          && isValidSession(request.resource.data);
         allow delete: if isOwner(userId);
       }
 
-      // ─── META ─────────────────────────────────────────────────────────────
       match /meta/{metaId} {
         allow read: if isOwner(userId);
-        allow write: if isOwner(userId)
+        allow create, update: if isOwner(userId)
           && metaId in ['main', 'devices', 'syncLog']
           && request.resource.data.size() <= 100;
-        allow delete: if false;
+        allow delete: if isOwner(userId);
       }
 
-      // ─── CATCH-ALL trong /users/{userId}/ ─────────────────────────────────
       match /{document=**} {
         allow read, write: if false;
       }
     }
 
-    // ────── CHẶN MỌI THỨ KHÁC NGOÀI /users/{userId} ──────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }
-
-    // ════════════════════════════════════════════════════════════════════════
-    // VALIDATORS
-    // ════════════════════════════════════════════════════════════════════════
 
     function isValidTask(data) {
       return data.keys().hasOnly([
@@ -130,23 +135,22 @@ service cloud.firestore {
           'createdAt', 'updatedAt', 'deletedAt',
           'migratedFrom'
         ])
-        // Required
         && isString(data.title, 500)
         && isString(data.date, 10)
         && data.status in ['todo', 'doing', 'done', 'deferred', 'stack', 'deleted']
         && data.priority in ['high', 'medium', 'low']
-        && (data.duration is int && data.duration >= 0 && data.duration <= 1440)
-        // Optional strings
+        && data.duration is int
+        && data.duration >= 0
+        && data.duration <= 1440
         && isOptionalString(data.get('start', null), 8)
         && isOptionalString(data.get('end', null), 8)
-        && isOptionalString(data.get('deadline', null), 8)
+        && isOptionalString(data.get('deadline', null), 10)
         && isOptionalString(data.get('notes', null), 10000)
         && isOptionalString(data.get('eventId', null), 100)
         && isOptionalString(data.get('projectId', null), 100)
         && isOptionalString(data.get('goalId', null), 100)
         && (!('impact' in data) || data.impact in ['high', 'medium', 'low'])
         && (!('energy' in data) || data.energy in ['deep', 'normal', 'light'])
-        && isOptionalString(data.get('id', null), 100)
         && isOptionalString(data.get('stackType', null), 50)
         && isOptionalString(data.get('stackedAt', null), 30)
         && isOptionalString(data.get('reason', null), 500)
@@ -154,14 +158,12 @@ service cloud.firestore {
         && isOptionalString(data.get('createdAt', null), 30)
         && isOptionalString(data.get('updatedAt', null), 30)
         && isOptionalString(data.get('deletedAt', null), 30)
-        // Booleans
-        && (data.get('mission', false) is bool)
-        && (data.get('done', false) is bool)
-        // deferCount
-        && (data.get('deferCount', 0) is int && data.get('deferCount', 0) >= 0)
-        // tags là list
-        && (data.tags is list && data.tags.size() <= 50)
-        // flow là map
+        && data.get('mission', false) is bool
+        && data.get('done', false) is bool
+        && data.get('deferCount', 0) is int
+        && data.get('deferCount', 0) >= 0
+        && data.tags is list
+        && data.tags.size() <= 50
         && (!('flow' in data) || data.flow is map);
     }
 
@@ -174,10 +176,8 @@ service cloud.firestore {
         && isString(data.title, 500)
         && isString(data.date, 10)
         && data.type in ['solar', 'lunar']
-        // recurring là boolean (app.js dùng true/false)
-        && (data.recurring is bool)
+        && data.recurring is bool
         && isOptionalString(data.get('notes', null), 5000)
-        && isOptionalString(data.get('id', null), 100)
         && isOptionalString(data.get('createdAt', null), 30)
         && isOptionalString(data.get('updatedAt', null), 30)
         && isOptionalString(data.get('deletedAt', null), 30);
@@ -195,25 +195,23 @@ service cloud.firestore {
         && isOptionalString(data.get('accent', null), 50)
         && isOptionalString(data.get('availableStart', null), 8)
         && isOptionalString(data.get('availableEnd', null), 8)
-        && (data.get('dailyMissionLimit', 0) is number
-            && data.get('dailyMissionLimit', 0) >= 0
-            && data.get('dailyMissionLimit', 0) <= 100)
-        && (data.get('notifications', false) is bool)
+        && data.get('dailyMissionLimit', 0) is number
+        && data.get('dailyMissionLimit', 0) >= 0
+        && data.get('dailyMissionLimit', 0) <= 100
+        && data.get('notifications', false) is bool
         && isOptionalString(data.get('backgroundPreset', null), 50)
         && isOptionalString(data.get('backgroundName', null), 200)
         && (!('workspace' in data) || data.workspace is map)
-        // KHÔNG cho phép ghi base64 image (chống vỡ 1MB)
         && (!('backgroundImage' in data)
-            || data.backgroundImage == ''
-            || data.backgroundImage == null)
+          || data.backgroundImage == ''
+          || data.backgroundImage == null)
         && isOptionalString(data.get('createdAt', null), 30)
         && isOptionalString(data.get('updatedAt', null), 30);
     }
 
     function isValidReviews(data) {
-      // createdAt: commitBatched của sync-engine tự thêm khi thiếu, và doc cũ đã có sẵn
       return data.keys().hasOnly(['data', 'updatedAt', 'createdAt', 'migratedFrom'])
-        && (data.get('data', {}) is map)
+        && data.get('data', {}) is map
         && isOptionalString(data.get('updatedAt', null), 30)
         && isOptionalString(data.get('createdAt', null), 30);
     }
@@ -224,12 +222,11 @@ service cloud.firestore {
           'createdAt', 'updatedAt', 'deletedAt',
           'migratedFrom'
         ])
-        && isOptionalString(data.get('id', null), 100)
         && isOptionalString(data.get('taskId', null), 100)
         && isOptionalString(data.get('date', null), 10)
-        && (data.get('minutes', 0) is int
-            && data.get('minutes', 0) >= 0
-            && data.get('minutes', 0) <= 1440)
+        && data.get('minutes', 0) is int
+        && data.get('minutes', 0) >= 0
+        && data.get('minutes', 0) <= 1440
         && isOptionalString(data.get('createdAt', null), 30)
         && isOptionalString(data.get('updatedAt', null), 30)
         && isOptionalString(data.get('deletedAt', null), 30);

@@ -6,19 +6,22 @@ const browser = process.env.CI
 
 module.exports = defineConfig({
   testDir: '../../tests/e2e',
+  outputDir: '../../test-results/playwright',
   timeout: 45000,
   fullyParallel: false,
-  reporter: [['list']],
+  reporter: process.env.CI
+    ? [['list'], ['html', { outputFolder: '../../playwright-report', open: 'never' }]]
+    : [['list']],
   use: {
     baseURL: 'http://127.0.0.1:4173',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'off'
+    video: 'retain-on-failure'
   },
   webServer: {
     command: 'npm run dev',
     url: 'http://127.0.0.1:4173/index.html',
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.CI,
     timeout: 30000
   },
   projects: [

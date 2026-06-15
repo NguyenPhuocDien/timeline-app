@@ -454,11 +454,11 @@
 
     body::before {
       background-image: var(--wallpaper-image);
-      background-size: cover;
+      background-size: contain;
       background-position: center;
       background-repeat: no-repeat;
+      background-color: var(--bg);
       opacity: var(--wallpaper-opacity);
-      transform: scale(1.03);
       z-index: 0;
       filter: saturate(1.06) contrast(1.02);
     }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chính sách Quyền riêng tư — Timeline Focus</title>
+<title>Chính sách Quyền riêng tư - Timeline Focus</title>
 <meta name="description" content="Chính sách quyền riêng tư của Timeline Focus.">
 <link rel="canonical" href="https://timeline-app-one-beta.vercel.app/privacy.html">
 <style>
@@ -15,120 +15,99 @@ ul, ol { padding-left: 24px; }
 li { margin: 4px 0; }
 a { color: #2563eb; }
 .meta { color: #666; font-size: 14px; margin-bottom: 24px; }
+.notice { background: #f3f4f6; border-left: 4px solid #2563eb; padding: 12px 16px; margin: 16px 0; }
 .back { display: inline-block; margin-top: 32px; padding: 8px 16px; background: #2563eb; color: #fff; border-radius: 6px; text-decoration: none; }
-code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
 </style>
 </head>
 <body>
 
 <h1>Chính sách Quyền riêng tư</h1>
-<p class="meta">Áp dụng cho ứng dụng <strong>Timeline Focus</strong> · Cập nhật lần cuối: <time>08/06/2026</time></p>
+<p class="meta">Áp dụng cho <strong>Timeline Focus</strong> · Cập nhật lần cuối: <time datetime="2026-06-15">15/06/2026</time></p>
 
-<p>Timeline Focus ("chúng tôi", "ứng dụng") tôn trọng quyền riêng tư của người dùng. Tài liệu này giải thích chúng tôi thu thập, sử dụng và bảo vệ dữ liệu cá nhân của bạn như thế nào, tuân thủ:</p>
+<p>Chính sách này mô tả dữ liệu Timeline Focus xử lý, mục đích xử lý và cách bạn có thể quản lý dữ liệu. Các quyền cụ thể phụ thuộc vào pháp luật áp dụng, bao gồm Nghị định 13/2023/NĐ-CP của Việt Nam và GDPR khi có liên quan.</p>
+
+<h2>1. Dữ liệu được xử lý</h2>
+<h3>1.1. Tài khoản</h3>
 <ul>
-  <li><strong>Nghị định 13/2023/NĐ-CP</strong> của Việt Nam về bảo vệ dữ liệu cá nhân</li>
-  <li><strong>GDPR</strong> (General Data Protection Regulation) của EU nếu bạn ở khu vực EU/EEA</li>
-  <li><strong>Google API Services User Data Policy</strong> (vì chúng tôi dùng đăng nhập Google)</li>
+  <li>Firebase Authentication xử lý mã người dùng, email, tên hiển thị và ảnh đại diện do Google cung cấp khi bạn đăng nhập.</li>
+  <li>Ứng dụng chỉ yêu cầu thông tin hồ sơ cơ bản phục vụ đăng nhập, không yêu cầu quyền truy cập Gmail, danh bạ hoặc Google Calendar.</li>
 </ul>
 
-<h2>1. Dữ liệu chúng tôi thu thập</h2>
-
-<h3>1.1. Thông tin tài khoản (khi bạn đăng nhập)</h3>
+<h3>1.2. Nội dung ứng dụng</h3>
 <ul>
-  <li>Địa chỉ email (từ tài khoản Google của bạn)</li>
-  <li>Tên hiển thị (nếu có)</li>
-  <li>Ảnh đại diện (URL, không lưu file)</li>
-  <li>User ID nội bộ do Firebase Authentication cấp</li>
-</ul>
-<p>Chúng tôi <strong>không</strong> truy cập email, danh bạ, lịch hoặc bất kỳ dữ liệu Google nào khác ngoài thông tin định danh cơ bản.</p>
-
-<h3>1.2. Dữ liệu bạn tạo trong ứng dụng</h3>
-<ul>
-  <li>Tasks (tiêu đề, ghi chú, ngày giờ, tag, trạng thái)</li>
-  <li>Sự kiện (events) bạn tạo</li>
-  <li>Focus sessions (thời gian, log ghi chú)</li>
-  <li>Cài đặt cá nhân (theme, ngôn ngữ, cấu hình thông báo)</li>
+  <li>Tasks, sự kiện, focus sessions, đánh giá theo ngày và cài đặt do bạn tạo.</li>
+  <li>Metadata cần cho đồng bộ và migration, ví dụ thời điểm cập nhật, phiên bản schema và bản sao migration tạm thời.</li>
+  <li>Mục đã xóa mềm có thể được giữ dưới dạng tombstone với trường <code>deletedAt</code> để đồng bộ thao tác xóa giữa các thiết bị.</li>
 </ul>
 
 <h3>1.3. Dữ liệu kỹ thuật</h3>
 <ul>
-  <li>Loại trình duyệt và thiết bị (để gỡ lỗi)</li>
-  <li>Log lỗi JavaScript (gửi tới dịch vụ giám sát lỗi nếu bật)</li>
-  <li>Thời điểm đăng nhập gần nhất</li>
+  <li>Firebase, Vercel và dịch vụ giám sát lỗi nếu được bật có thể xử lý IP, User-Agent, log truy cập hoặc stack trace theo chính sách của họ.</li>
+  <li>Ứng dụng không sử dụng dữ liệu vị trí chính xác, cookie quảng cáo hoặc bán dữ liệu cá nhân.</li>
 </ul>
 
-<p>Chúng tôi <strong>không</strong> theo dõi vị trí địa lý, không dùng cookie quảng cáo, không bán dữ liệu cho bên thứ ba.</p>
-
-<h2>2. Mục đích sử dụng dữ liệu</h2>
+<h2>2. Mục đích xử lý</h2>
 <ul>
-  <li><strong>Cung cấp dịch vụ</strong>: lưu trữ tasks/events của bạn, đồng bộ giữa các thiết bị</li>
-  <li><strong>Xác thực</strong>: nhận biết bạn khi đăng nhập</li>
-  <li><strong>Khắc phục sự cố</strong>: phân tích log lỗi để sửa bug</li>
-  <li><strong>Liên lạc</strong>: thông báo thay đổi quan trọng về dịch vụ (qua email)</li>
+  <li>Cung cấp chức năng local-first và đồng bộ cloud khi bạn đăng nhập.</li>
+  <li>Xác thực tài khoản, bảo vệ dữ liệu theo từng người dùng và xử lý xung đột đồng bộ.</li>
+  <li>Migration dữ liệu, khắc phục lỗi, bảo mật và duy trì dịch vụ.</li>
+  <li>Phản hồi yêu cầu hỗ trợ hoặc quyền riêng tư do bạn chủ động gửi.</li>
 </ul>
-<p>Chúng tôi <strong>không</strong>: gửi quảng cáo, không bán/cho thuê dữ liệu, không phân tích nội dung tasks của bạn cho mục đích thương mại.</p>
 
-<h2>3. Cách dữ liệu được lưu trữ</h2>
+<h2>3. Nơi lưu dữ liệu</h2>
 <ul>
-  <li><strong>Local-first</strong>: dữ liệu của bạn được lưu trên thiết bị (trình duyệt) là chính, ngay cả khi không có mạng</li>
-  <li><strong>Cloud sync (tùy chọn)</strong>: nếu bạn đăng nhập, dữ liệu được sao chép lên Google Firebase Firestore</li>
-  <li><strong>Vùng máy chủ</strong>: Firebase hiện đặt máy chủ tại nhiều vùng do Google quản lý (xem <a href="https://firebase.google.com/docs/firestore/locations" target="_blank" rel="noopener">danh sách</a>)</li>
-  <li><strong>Mã hóa</strong>: tất cả truyền tải qua HTTPS/TLS; dữ liệu lưu trữ được Firebase mã hóa at-rest</li>
+  <li><strong>Trên thiết bị:</strong> localStorage và IndexedDB có thể lưu dữ liệu ứng dụng, cache và hàng đợi đồng bộ.</li>
+  <li><strong>Trên cloud:</strong> khi đăng nhập, dữ liệu được đồng bộ tới Google Firebase Authentication và Cloud Firestore.</li>
+  <li><strong>Hạ tầng:</strong> Vercel hoặc Firebase Hosting có thể phục vụ tệp ứng dụng và lưu log vận hành.</li>
 </ul>
+<p>Dữ liệu truyền qua mạng sử dụng HTTPS/TLS. Nhà cung cấp hạ tầng quản lý mã hóa dữ liệu lưu trữ theo tài liệu và cấu hình dịch vụ của họ.</p>
 
-<h2>4. Bên thứ ba có quyền truy cập</h2>
-<table style="width:100%;border-collapse:collapse;margin:8px 0">
-<thead><tr style="text-align:left"><th style="border-bottom:1px solid #ddd;padding:6px">Dịch vụ</th><th style="border-bottom:1px solid #ddd;padding:6px">Mục đích</th><th style="border-bottom:1px solid #ddd;padding:6px">Dữ liệu nhận</th></tr></thead>
-<tbody>
-<tr><td style="padding:6px;border-bottom:1px solid #eee">Google Firebase</td><td style="padding:6px;border-bottom:1px solid #eee">Auth + Database</td><td style="padding:6px;border-bottom:1px solid #eee">Email, tasks, events, settings</td></tr>
-<tr><td style="padding:6px;border-bottom:1px solid #eee">Vercel</td><td style="padding:6px;border-bottom:1px solid #eee">Hosting</td><td style="padding:6px;border-bottom:1px solid #eee">IP, User-Agent (log truy cập)</td></tr>
-<tr><td style="padding:6px;border-bottom:1px solid #eee">Sentry (nếu bật)</td><td style="padding:6px;border-bottom:1px solid #eee">Error monitoring</td><td style="padding:6px;border-bottom:1px solid #eee">Stack trace JS, User-Agent, anonymous user ID</td></tr>
-</tbody>
-</table>
-
-<h2>5. Quyền của bạn (GDPR + NĐ 13/2023)</h2>
-<p>Bạn có quyền:</p>
+<h2>4. Nhà cung cấp dịch vụ</h2>
 <ul>
-  <li><strong>Truy cập</strong>: xem toàn bộ dữ liệu của mình (tính năng "Xuất dữ liệu" trong app sẽ tải về file JSON)</li>
-  <li><strong>Chỉnh sửa</strong>: sửa hoặc xóa từng task/event trong app</li>
-  <li><strong>Xóa</strong>: yêu cầu xóa toàn bộ tài khoản và dữ liệu liên quan (gửi email tới <a href="mailto:support@timeline-focus.app">support@timeline-focus.app</a>)</li>
-  <li><strong>Chuyển dữ liệu</strong>: tải về dữ liệu định dạng JSON để import sang ứng dụng khác</li>
-  <li><strong>Phản đối xử lý</strong>: từ chối bất kỳ mục đích xử lý nào ngoài lý do kỹ thuật bắt buộc</li>
-  <li><strong>Rút lại đồng ý</strong>: đăng xuất bất kỳ lúc nào → dữ liệu cloud dừng được đồng bộ</li>
-  <li><strong>Khiếu nại</strong>: liên hệ Cục An toàn thông tin (Việt Nam) hoặc cơ quan bảo vệ dữ liệu địa phương</li>
+  <li><strong>Google Firebase:</strong> đăng nhập, cơ sở dữ liệu và đồng bộ.</li>
+  <li><strong>Vercel/Firebase Hosting:</strong> phân phối ứng dụng và log vận hành.</li>
+  <li><strong>Sentry, nếu được bật:</strong> giám sát lỗi; ứng dụng cấu hình không gửi email người dùng làm định danh Sentry.</li>
 </ul>
+<p>Các nhà cung cấp có chính sách lưu trữ, backup và log riêng. Timeline Focus không kiểm soát việc xóa tức thời khỏi mọi bản sao dự phòng nội bộ của nhà cung cấp.</p>
 
-<h2>6. Lưu trữ trong bao lâu</h2>
+<h2>5. Quyền và lựa chọn của bạn</h2>
 <ul>
-  <li>Dữ liệu hoạt động: lưu cho đến khi bạn xóa hoặc yêu cầu xóa tài khoản</li>
-  <li>Bản backup: tối đa 30 ngày sau khi xóa, để phục hồi nếu lỡ tay</li>
-  <li>Log lỗi (Sentry): tối đa 90 ngày</li>
-  <li>Backup migration (data cũ): 30 ngày, sau đó tự động xóa</li>
+  <li>Xem, chỉnh sửa hoặc xóa nội dung trong ứng dụng.</li>
+  <li>Xuất dữ liệu khi chức năng xuất dữ liệu có sẵn trong phiên bản bạn đang dùng.</li>
+  <li>Đăng xuất để dừng đồng bộ mới; việc đăng xuất không tự xóa dữ liệu đã lưu.</li>
+  <li>Yêu cầu truy cập, sửa, xóa, hạn chế hoặc phản đối xử lý khi pháp luật áp dụng trao quyền đó.</li>
+  <li>Gửi yêu cầu qua <a href="mailto:support@timeline-focus.app?subject=[Privacy]%20Yeu%20cau">support@timeline-focus.app</a>.</li>
 </ul>
 
-<h2>7. Trẻ em</h2>
-<p>Timeline Focus không nhắm tới trẻ em dưới 13 tuổi. Nếu bạn dưới 13 tuổi, vui lòng không sử dụng dịch vụ. Phụ huynh có thể yêu cầu xóa dữ liệu con em bằng cách liên hệ <a href="mailto:support@timeline-focus.app">support@timeline-focus.app</a>.</p>
-
-<h2>8. Cookie và Local Storage</h2>
-<p>Chúng tôi sử dụng:</p>
+<h2>6. Xóa tài khoản</h2>
+<div class="notice">
+  Khi chức năng xóa tài khoản được nạp và bật trong giao diện, ứng dụng có thể xóa các collection Firestore đã biết của người dùng, tài liệu gốc <code>users/{uid}</code>, rồi yêu cầu Firebase xóa tài khoản Authentication.
+</div>
 <ul>
-  <li><strong>localStorage</strong>: lưu dữ liệu offline-first của bạn (tasks, settings)</li>
-  <li><strong>IndexedDB</strong>: Firebase dùng để cache dữ liệu sync</li>
-  <li><strong>Cookie</strong>: chỉ cho phiên đăng nhập Firebase Auth (essential cookie, không cần thông báo cookie banner)</li>
+  <li>Firebase có thể yêu cầu bạn đăng nhập lại gần thời điểm xóa. Nếu bước xóa Auth chưa hoàn tất, ứng dụng phải hiển thị lỗi rõ ràng để bạn tái xác thực và thử lại.</li>
+  <li>Quá trình phụ thuộc vào kết nối mạng và có thể cần chạy lại nếu bị gián đoạn. Không nên coi tài khoản đã xóa cho đến khi ứng dụng xác nhận cả Firestore và Authentication đều hoàn tất.</li>
+  <li>Xóa tài khoản cloud <strong>không tự xóa dữ liệu local</strong> còn trong localStorage, IndexedDB, file export hoặc backup trên thiết bị của bạn. Bạn có thể xóa dữ liệu trang web trong cài đặt trình duyệt.</li>
+  <li>Bạn cũng có thể gửi yêu cầu hỗ trợ qua email. Chúng tôi có thể cần xác minh danh tính trước khi xử lý.</li>
 </ul>
-<p>Chúng tôi <strong>không</strong> dùng cookie analytics, advertising, hay tracking bên thứ ba.</p>
+
+<h2>7. Thời gian lưu trữ</h2>
+<ul>
+  <li>Dữ liệu hoạt động được giữ cho đến khi bạn xóa, xóa tài khoản hoặc dữ liệu không còn cần thiết cho dịch vụ.</li>
+  <li>Tombstone và trường backup migration <code>_backup_v1</code> đủ điều kiện xóa sau 30 ngày.</li>
+  <li>Cleanup 30 ngày hiện là thao tác <strong>do client kích hoạt khi người dùng đăng nhập và online</strong>; đây không phải lịch xóa nền tự động được bảo đảm. Xóa tài khoản sẽ cố gắng xóa ngay các dữ liệu Firestore đã biết mà không chờ hết 30 ngày.</li>
+  <li>Log và bản sao dự phòng do nhà cung cấp hạ tầng quản lý có thể tồn tại theo chu kỳ retention, yêu cầu pháp lý và chính sách riêng của nhà cung cấp.</li>
+</ul>
+
+<h2>8. Trẻ em</h2>
+<p>Timeline Focus không chủ đích cung cấp dịch vụ cho trẻ em dưới 13 tuổi. Phụ huynh hoặc người giám hộ có thể liên hệ để yêu cầu xem xét và xóa dữ liệu.</p>
 
 <h2>9. Thay đổi chính sách</h2>
-<p>Chúng tôi có thể cập nhật chính sách này. Khi có thay đổi quan trọng, sẽ thông báo qua email (nếu bạn có tài khoản) hoặc banner trong app. Tiếp tục sử dụng dịch vụ sau khi cập nhật được coi là chấp nhận chính sách mới.</p>
+<p>Chính sách có thể được cập nhật khi tính năng, nhà cung cấp hoặc yêu cầu pháp lý thay đổi. Ngày cập nhật sẽ được ghi trên trang này; thông báo bổ sung sẽ được cung cấp khi hợp lý và khả thi.</p>
 
 <h2>10. Liên hệ</h2>
-<p>Mọi câu hỏi, yêu cầu hoặc khiếu nại về quyền riêng tư:</p>
-<ul>
-  <li>Email: <a href="mailto:support@timeline-focus.app">support@timeline-focus.app</a></li>
-  <li>Người đại diện: Nguyễn Phước Điền (Developer)</li>
-</ul>
+<p>Email: <a href="mailto:support@timeline-focus.app">support@timeline-focus.app</a></p>
+<p>Người phụ trách: Nguyễn Phước Điền (Developer)</p>
 
-<a class="back" href="/">← Quay lại ứng dụng</a>
-
+<a class="back" href="/">Quay lại ứng dụng</a>
 </body>
 </html>

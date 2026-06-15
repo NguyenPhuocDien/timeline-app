@@ -175,7 +175,14 @@ export async function runMigrationIfNeeded(dbFire, uid) {
   try {
     totalWrites += await migrateCollection(sessions, 'sessions', sanitizeSessionForFirestore);
   } catch (err) {
-    console.error('[migration] Sessions failed (non-critical):', err);
+    console.error('[migration] Sessions migration failed:', err);
+    return {
+      ...EMPTY_RESULT,
+      skipped: false,
+      taskCount: tasks.length,
+      eventCount: events.length,
+      error: 'Sessions migration failed: ' + (err.message || err),
+    };
   }
 
   // 2d. Settings — 1 doc
@@ -188,7 +195,15 @@ export async function runMigrationIfNeeded(dbFire, uid) {
       migratedFrom: 1,
     });
   } catch (err) {
-    console.warn('[migration] Settings failed (non-critical):', err);
+    console.error('[migration] Settings migration failed:', err);
+    return {
+      ...EMPTY_RESULT,
+      skipped: false,
+      taskCount: tasks.length,
+      eventCount: events.length,
+      sessionCount: sessions.length,
+      error: 'Settings migration failed: ' + (err.message || err),
+    };
   }
 
   // 2e. Reviews — 1 doc (object map theo ngày)
@@ -201,7 +216,15 @@ export async function runMigrationIfNeeded(dbFire, uid) {
       migratedFrom: 1,
     });
   } catch (err) {
-    console.warn('[migration] Reviews failed (non-critical):', err);
+    console.error('[migration] Reviews migration failed:', err);
+    return {
+      ...EMPTY_RESULT,
+      skipped: false,
+      taskCount: tasks.length,
+      eventCount: events.length,
+      sessionCount: sessions.length,
+      error: 'Reviews migration failed: ' + (err.message || err),
+    };
   }
 
   // Bước 3: Mark migration done
@@ -214,6 +237,15 @@ export async function runMigrationIfNeeded(dbFire, uid) {
     console.log(`[migration] ✅ Done. Migrated ${totalWrites} entities.`);
   } catch (err) {
     console.error('[migration] Failed to mark version (data is safe, will retry next login):', err);
+    return {
+      ...EMPTY_RESULT,
+      skipped: false,
+      taskCount: tasks.length,
+      eventCount: events.length,
+      sessionCount: sessions.length,
+      reviewCount: Object.keys(reviews).length,
+      error: 'Migration finalization failed: ' + (err.message || err),
+    };
   }
 
   return {

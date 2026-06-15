@@ -4,10 +4,11 @@
   "private": true,
   "description": "Timeline Focus static Firebase PWA",
   "scripts": {
-    "build": "node -e \"const fs=require('fs'); ['index.html','app.js','style.css','manifest.webmanifest','sw.js'].forEach(f=>{if(!fs.existsSync(f)){throw new Error('Missing static asset: '+f)}}); console.log('Static web assets verified')\"",
+    "build": "node ../../scripts/build-static-app.mjs",
     "dev": "python -m http.server 4173 --bind 127.0.0.1",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:offline": "playwright test offline-cold-start.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0"

@@ -16,11 +16,11 @@
  *   - Đổi cấu trúc cache (thêm/bớt resource)
  *   - Cần force invalidate cache cũ
  *
- * App.js register: navigator.serviceWorker.register('./sw.js?v=20', { updateViaCache: 'none' })
+ * App.js register: navigator.serviceWorker.register('./sw.js?v=21', { updateViaCache: 'none' })
  * → updateViaCache: 'none' đảm bảo SW file luôn fetch từ network (không cache SW)
  */
 
-const CACHE_VERSION = 'tlf-v20';
+const CACHE_VERSION = 'tlf-v21';
 const CACHE_NAME = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -28,31 +28,30 @@ const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const PRECACHE_URLS = [
   './',
   './index.html',
-  './app.js?v=18',
+  './app.js?v=21',
   './style.css',
   './manifest.webmanifest',
   './vendor/dexie.min.js',
-  './src/core/storage.js?v=18',
+  './src/core/storage.js?v=21',
   './src/core/schema.js',
   './src/core/migration.js',
-  './src/core/sync-engine.js?v=18',
-  './src/ui/sync-indicator.js?v=18',
+  './src/core/sync-engine.js?v=21',
+  './src/core/account-management.js?v=21',
+  './src/ui/sync-indicator.js?v=21',
 ];
 
 // ─── INSTALL ────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      // addAll fail-fast: nếu 1 file fail thì toàn bộ install fail
-      // → dùng Promise.allSettled để tolerant với 404 lẻ tẻ
-      return Promise.allSettled(
+      // Core assets are atomic: an incomplete cache must not become active.
+      return Promise.all(
         PRECACHE_URLS.map((url) =>
           fetch(url, { cache: 'reload' })
             .then((res) => {
               if (res.ok) return cache.put(url, res);
-              console.warn('[SW] Pre-cache miss:', url, res.status);
+              throw new Error(`Pre-cache failed: ${url} (${res.status})`);
             })
-            .catch((err) => console.warn('[SW] Pre-cache error:', url, err))
         )
       );
     }).then(() => self.skipWaiting())

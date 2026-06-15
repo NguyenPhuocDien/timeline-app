@@ -106,7 +106,9 @@ export function sanitizeTaskForFirestore(task) {
   // Optional strings
   if (task.start) out.start = String(task.start).slice(0, 8);
   if (task.end) out.end = String(task.end).slice(0, 8);
-  if (task.deadline) out.deadline = String(task.deadline).slice(0, 8);
+  // deadline có thể là GIỜ "HH:MM" (mới) hoặc NGÀY "YYYY-MM-DD" (cũ, 10 ký tự).
+  // slice(0,10) thay vì slice(0,8) để KHÔNG cắt cụt giá trị ngày cũ.
+  if (task.deadline) out.deadline = String(task.deadline).slice(0, 10);
   if (task.notes) out.notes = String(task.notes).slice(0, 10000);
   if (task.eventId) out.eventId = String(task.eventId).slice(0, 100);
   if (task.projectId) out.projectId = String(task.projectId).slice(0, 100);

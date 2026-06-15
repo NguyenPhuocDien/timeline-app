@@ -12,12 +12,26 @@
     "dev": "npm run dev --workspace @timeline/web",
     "dev:web": "npm run dev --workspace @timeline/web",
     "build": "npm run build --workspace @timeline/web",
-    "test": "npm run test:e2e --workspace @timeline/web",
+    "validate": "npm run lint && npm run check:syntax && npm run validate:static && npm run test:unit",
+    "validate:static": "node scripts/validate-static-app.mjs",
+    "check:syntax": "node scripts/check-js-syntax.mjs",
+    "lint": "eslint .",
+    "test": "npm run validate && npm run test:firebase && npm run test:e2e",
+    "test:unit": "node --test tests/unit/*.test.mjs",
+    "test:firebase": "firebase emulators:exec --config apps/web/firebase.json --project demo-timeline-focus --only firestore \"node --test --test-concurrency=1 tests/firebase/*.test.mjs\"",
     "test:e2e": "npm run test:e2e --workspace @timeline/web",
     "test:e2e:headed": "npm run test:e2e:headed --workspace @timeline/web",
+    "release:gate": "node scripts/release-gate.mjs",
     "turbo": "turbo"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "es-module-lexer": "^2.1.0",
+    "eslint": "^10.5.0",
+    "firebase": "^12.14.0",
+    "firebase-tools": "^15.20.0",
+    "globals": "^17.6.0",
     "turbo": "^2.8.0"
   },
   "repository": {
