@@ -10,6 +10,7 @@ export default [
       '**/test-results/**',
       'apps/web/vendor/**',
       'docs/**',
+      'functions/**',
     ],
   },
   {
