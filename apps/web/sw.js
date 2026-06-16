@@ -12,11 +12,11 @@
  * v19: sync auto-retry + network-flap debounce + notification error handling
  *      + sticky notes (Ghi chú nhanh), task color accent + date chip, macOS polish
  *
- * Tăng CACHE_VERSION khi:
- *   - Đổi cấu trúc cache (thêm/bớt resource)
- *   - Cần force invalidate cache cũ
+ * Version (số sau "tlf-v") được ĐỒNG BỘ TỰ ĐỘNG từ `appVersion` trong root
+ * package.json qua `npm run version:sync`. KHÔNG sửa số ở đây bằng tay —
+ * bump `appVersion` rồi chạy sync; CI (`npm run version:check`) sẽ chặn nếu lệch.
  *
- * App.js register: navigator.serviceWorker.register('./sw.js?v=23', { updateViaCache: 'none' })
+ * App.js register: navigator.serviceWorker.register('./sw.js?v=<N>', { updateViaCache: 'none' })
  * → updateViaCache: 'none' đảm bảo SW file luôn fetch từ network (không cache SW)
  */
 

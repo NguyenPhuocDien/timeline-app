@@ -17,7 +17,7 @@
  *   db = { tasks: [], events: [], sessions: [], settings: {}, reviews: {} }
  */
 
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js';
 import {
   getAuth,
   signInWithPopup,
@@ -29,7 +29,7 @@ import {
   browserLocalPersistence,
   signOut,
   onAuthStateChanged,
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+} from 'https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js';
 import {
   initializeFirestore,
   memoryLocalCache,
@@ -39,7 +39,7 @@ import {
   writeBatch,
   setDoc,
   serverTimestamp,
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+} from 'https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js';
 
 import {
   sanitizeTaskForFirestore,

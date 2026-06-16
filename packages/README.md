@@ -2,11 +2,13 @@
 
 Shared, non-deployable code belongs here.
 
-Suggested future packages:
+Currently empty — extraction is demand-driven. The shipping product is the
+vanilla-JS PWA in `apps/web` (browser-loaded ES modules, no bundler). Do not
+move files out of `apps/web/src` into a package until the app actually adopts a
+bundler or import-map strategy; until then a shared package can't be imported by
+the browser at runtime.
 
-- `ui`: reusable React components and design tokens after the web app moves to React/Next.js.
-- `utils`: date helpers, formatters, constants, and type guards.
-- `config`: shared ESLint, TypeScript, Prettier, and Tailwind configuration.
-- `types`: shared TypeScript types, Zod schemas, and API contracts.
+Candidate packages once a build step exists:
 
-Keep package extraction demand-driven. Do not move browser-loaded files from `apps/web/src` into packages until the app has a bundler or import-map strategy.
+- `utils`: date helpers, formatters, constants, type guards.
+- `config`: shared ESLint / Prettier configuration.
