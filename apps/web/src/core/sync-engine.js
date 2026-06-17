@@ -60,6 +60,10 @@ import { runMigrationIfNeeded } from './migration.js';
 const SAME_ORIGIN_AUTH_HOSTS = [
   'timeline-app-9a872.firebaseapp.com',
   'timelinefocus.web.app',
+  // Domain Vercel: vercel.json rewrite /__/auth/* về Firebase Hosting nên login
+  // chạy same-origin ở đây (tránh popup cross-origin firebaseapp.com bị trình
+  // duyệt chặn third-party cookie → popup mở rồi đóng trắng không đăng nhập được).
+  'timeline-app-one-beta.vercel.app',
 ];
 
 const DEFAULT_CONFIG = {

@@ -17,6 +17,8 @@ test-results/
 **/dist/
 apps/web/.env.local
 apps/web/.firebase/
+.gcal-secrets.local
+service-account.local.json
 apps/web/firebase-debug.log
 
 # Snapshots and temp files
