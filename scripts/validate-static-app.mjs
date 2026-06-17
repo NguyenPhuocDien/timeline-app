@@ -87,12 +87,16 @@ for (const shortcut of manifest.shortcuts || []) {
 }
 
 const swSource = await readFile(path.join(webRoot, 'sw.js'), 'utf8');
-const precacheBlock = swSource.match(/const PRECACHE_URLS\s*=\s*\[([\s\S]*?)\];/);
-if (!precacheBlock) {
-  fail('sw.js does not define PRECACHE_URLS');
+// Danh sách precache nay tách CORE_URLS + OPTIONAL_URLS; ?v= dùng template literal
+// `...${V}` (backtick) nên cũng phải bắt chuỗi backtick. localAssetPath cắt query
+// nên phần ${V} không ảnh hưởng kiểm tra file tồn tại.
+const precacheBlocks = [...swSource.matchAll(/const (?:CORE_URLS|OPTIONAL_URLS|PRECACHE_URLS)\s*=\s*\[([\s\S]*?)\];/g)];
+if (!precacheBlocks.length) {
+  fail('sw.js does not define CORE_URLS/OPTIONAL_URLS (precache list)');
 } else {
-  const urls = [...precacheBlock[1].matchAll(/["']([^"']+)["']/g)].map((match) => match[1]);
-  await Promise.all(urls.map((url) => requireFile(url === './' ? 'index.html' : url, 'sw.js PRECACHE_URLS')));
+  const urls = precacheBlocks.flatMap((block) =>
+    [...block[1].matchAll(/[`"']([^`"']+)[`"']/g)].map((match) => match[1]));
+  await Promise.all(urls.map((url) => requireFile(url === './' ? 'index.html' : url, 'sw.js precache')));
 }
 
 const cacheVersion = swSource.match(/const CACHE_VERSION\s*=\s*["']tlf-v(\d+)["']/)?.[1];
