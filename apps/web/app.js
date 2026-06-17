@@ -566,6 +566,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
         persistLocal();
         if (window.idbSaveAll) window.idbSaveAll(db);
         if (window.firebaseSync) window.firebaseSync(db);
+        if (window.gcalSyncOnPersist) window.gcalSyncOnPersist(db);
       } catch (e) {
         // QuotaExceededError — warn user
         if (e.name === 'QuotaExceededError' || e.code === 22) {
@@ -2003,7 +2004,23 @@ ${commandCenter}
             ${c.system ? '' : `<button class="iconBtn" title="Xóa" onclick="deleteCalendar('${esc(c.id)}')">✕</button>`}
           </span>
         </li>`).join('');
-      return `<div class="card calPanel"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="margin:0">Lịch của tôi</h3><button class="btn sm" onclick="addCalendar()">${uiIcon('plus')}</button></div><ul class="calList">${rows}</ul>${googleCalendarsPanelHTML()}</div>`;
+      return `<div class="card calPanel"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="margin:0">Lịch của tôi</h3><button class="btn sm" onclick="addCalendar()">${uiIcon('plus')}</button></div><ul class="calList">${rows}</ul>${googleCalendarsPanelHTML()}${googleTwoWayPanelHTML()}</div>`;
+    }
+    // Đồng bộ 2 chiều (beta) — ghi task/event của app lên Google + nhận thay đổi ngược.
+    function googleTwoWayPanelHTML() {
+      const on = typeof window.gcalServerIsConnected === 'function' && window.gcalServerIsConnected();
+      if (on) {
+        return `<div class="gcalSection">
+          <div class="gcalHead"><span class="gcalBadge">2 chiều</span> Đồng bộ 2 chiều <span class="pill">đang bật</span></div>
+          <p class="muted small" style="margin:6px 0 8px">Task/sự kiện có ngày sẽ tự đẩy lên lịch "Timeline Focus" trên Google.</p>
+          <button class="btn sm secondary" onclick="disconnectGoogleTwoWay()">Tắt đồng bộ 2 chiều</button>
+        </div>`;
+      }
+      return `<div class="gcalSection">
+        <div class="gcalHead"><span class="gcalBadge">2 chiều</span> Đồng bộ 2 chiều <span class="pill">beta</span></div>
+        <p class="muted small" style="margin:6px 0 8px">Ghi task/sự kiện của app lên Google và nhận chỉnh sửa ngược. Cần cấu hình server.</p>
+        <button class="btn sm" onclick="connectGoogleTwoWay()">Bật đồng bộ 2 chiều</button>
+      </div>`;
     }
     // Nhóm "Lịch Google" (read-only) trong panel "Lịch của tôi".
     function googleCalendarsPanelHTML() {
@@ -2042,6 +2059,16 @@ ${commandCenter}
     }
     function disconnectGoogleCalendar() {
       if (typeof window.gcalDisconnect === 'function') window.gcalDisconnect();
+      render();
+    }
+    async function connectGoogleTwoWay() {
+      if (typeof window.gcalServerConnect !== 'function') { toast('Tính năng đồng bộ 2 chiều chưa sẵn sàng.'); return; }
+      const ok = await window.gcalServerConnect();
+      if (ok && typeof window.gcalSyncPushAll === 'function') window.gcalSyncPushAll(db); // đẩy toàn bộ lần đầu
+      render();
+    }
+    function disconnectGoogleTwoWay() {
+      if (typeof window.gcalServerDisconnect === 'function') window.gcalServerDisconnect();
       render();
     }
     function refreshGoogleCalendar() {

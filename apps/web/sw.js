@@ -37,6 +37,7 @@ const PRECACHE_URLS = [
   './src/core/migration.js',
   './src/core/sync-engine.js?v=24',
   './src/core/gcal.js?v=24',
+  './src/core/gcal-sync.js?v=24',
   './src/core/account-management.js?v=24',
   './src/ui/sync-indicator.js?v=24',
 ];

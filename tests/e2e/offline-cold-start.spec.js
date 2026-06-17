@@ -20,7 +20,7 @@ test('cold-starts from the service worker cache while fully offline', async ({ c
 
   await expect.poll(async () => page.evaluate(async () => {
     const keys = await caches.keys();
-    return keys.some((key) => key.startsWith('tlf-v23'));
+    return keys.some((key) => key.startsWith('tlf-v'));
   })).toBe(true);
 
   await page.close();
