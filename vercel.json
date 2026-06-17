@@ -1,5 +1,8 @@
 {
   "outputDirectory": "apps/web",
+  "crons": [
+    { "path": "/api/gcal/renew", "schedule": "0 3 * * *" }
+  ],
   "rewrites": [
     {
       "source": "/__/auth/:match*",

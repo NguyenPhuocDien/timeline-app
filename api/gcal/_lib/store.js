@@ -74,6 +74,24 @@ async function getChannel(channelId) {
   const snap = await db().doc(PATHS.channel(channelId)).get();
   return snap.exists ? snap.data() : null;
 }
+async function deleteChannel(channelId) {
+  await db().doc(PATHS.channel(channelId)).delete();
+}
+/** Mọi channel đang đăng ký (cho cron gia hạn). */
+async function listChannels() {
+  const snap = await db().collection('gcal_channels').get();
+  return snap.docs.map((d) => ({ channelId: d.id, ...d.data() }));
+}
+
+// ── Ghi bản ghi của app (Admin, bypass rules) — dùng cho Pha 3 Google→App ────
+/** Tạo/ghi đè một task/event của user. coll ∈ 'tasks' | 'events'. */
+async function setAppItem(uid, coll, id, patch) {
+  await db().doc(`users/${uid}/${coll}/${id}`).set({ ...patch, id }, { merge: true });
+}
+async function getAppItem(uid, coll, id) {
+  const snap = await db().doc(`users/${uid}/${coll}/${id}`).get();
+  return snap.exists ? snap.data() : null;
+}
 
 // ── Short-lived OAuth state nonce (maps nonce -> uid during consent) ─────────
 async function putOauthState(nonce, uid) {
@@ -100,6 +118,10 @@ module.exports = {
   deleteLink,
   saveChannel,
   getChannel,
+  deleteChannel,
+  listChannels,
+  setAppItem,
+  getAppItem,
   putOauthState,
   takeOauthState,
 };

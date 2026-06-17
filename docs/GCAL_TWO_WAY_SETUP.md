@@ -25,10 +25,13 @@ Google Calendar ──webhook──► /api/gcal/webhook (Vercel) ──► Fire
 | `users/{uid}/gcal_state/main` | syncToken, channelId, channelExpiry, calendarId của "Timeline Focus" | chỉ server |
 
 ## Lộ trình
-- [ ] **Pha 0 — Hạ tầng** (cần USER làm trong Console — xem checklist dưới)
-- [ ] **Pha 1 — OAuth server:** flow lấy + lưu refresh token; nút "Kết nối Google Calendar" mới (hết reconnect mỗi giờ)
-- [ ] **Pha 2 — App → Google:** Firestore trigger đẩy create/update/delete lên lịch "Timeline Focus" + lưu mapping
-- [ ] **Pha 3 — Google → App:** webhook + incremental `syncToken` ghi về Firestore; cron gia hạn channel; chống loop
+- [ ] **Pha 0 — Hạ tầng** (cần USER làm trong Console — xem checklist dưới) ← ĐANG CHỜ
+- [x] **Pha 1 — OAuth server:** `auth-url.js` + `callback.js` lấy/mã hoá/lưu refresh token + tạo lịch "Timeline Focus". (Chạy được sau Pha 0.)
+- [x] **Pha 2 — App → Google:** `push.js` — app gọi sau khi ghi Firestore; insert/patch/delete lên lịch "Timeline Focus" + lưu mapping `gcal_links` (etag chống loop). *Vercel không có Firestore trigger nên app chủ động gọi.*
+- [x] **Pha 3 — Google → App:** `watch.js` (đăng ký push channel + seed syncToken) · `webhook.js` (incremental `syncToken` → ghi Firestore) · `renew.js` (cron gia hạn channel, `vercel.json` crons 03:00 UTC).
+  - **Phạm vi an toàn:** webhook CHỈ phản chiếu event do app tạo (có `tlfId`) khi user sửa/xoá trên Google. Event tạo trực tiếp trong lịch "Timeline Focus" (không `tlfId`) bị bỏ qua — tránh đoán sai task/event. Mở rộng sau nếu cần.
+
+> **Còn lại để chạy thật (sau Pha 0):** (a) wire client `app.js` gọi `/api/gcal/push` sau mỗi lần ghi task/event + nút "Kết nối Google Calendar (server)" gọi `/api/gcal/auth-url` & `/api/gcal/watch`; (b) test end-to-end với tài khoản thật. Backend đã sẵn sàng, chưa kích hoạt ở client để khỏi ảnh hưởng app đang chạy.
 
 ---
 
@@ -51,6 +54,7 @@ Google Calendar ──webhook──► /api/gcal/webhook (Vercel) ──► Fire
    - `GCAL_TOKEN_KEY` — khoá mã hoá refresh token, sinh bằng `openssl rand -base64 32`
    - `FIREBASE_SERVICE_ACCOUNT` — JSON service account (raw hoặc base64) của project `timeline-app-9a872`
    - (tuỳ chọn) `APP_BASE_URL` — origin cố định nếu không muốn suy ra từ header request.
+   - (tuỳ chọn) `CRON_SECRET` — bảo vệ endpoint `/api/gcal/renew`; nếu đặt, Vercel Cron tự gửi `Authorization: Bearer <CRON_SECRET>`.
 
 4. **Xác nhận với tôi khi xong.** Secret không dán vào chat — chỉ cần báo đã nạp xong trên Vercel.
 
