@@ -1,7 +1,7 @@
 {
   "name": "timeline-app",
   "version": "1.0.0",
-  "appVersion": 27,
+  "appVersion": 28,
   "private": true,
   "description": "Timeline Focus monorepo",
   "packageManager": "npm@11.13.0",

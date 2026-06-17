@@ -776,7 +776,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       // Register SW
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker
-          .register('./sw.js?v=27', { updateViaCache: 'none' })
+          .register('./sw.js?v=28', { updateViaCache: 'none' })
           .catch(err => console.warn('[SW]', err));
       }
     }
@@ -1209,21 +1209,31 @@ ${commandCenter}
       const now = new Date();
       const isToday = fmtDate(now) === selectedDate;
       const line = isToday ? `<div class="nowLine" id="nowLine" style="top:${(dayProgress() / 60) * hourH}px"></div>` : '';
-      const blocks = tasks.map(t => {
-        const top = (minOf(t.start) / 60) * hourH;
-        const height = Math.max(42, ((minOf(t.end) - minOf(t.start)) / 60) * hourH - 4);
-        return `<div class="tblock ${t.priority} ${overlaps.has(t.id) ? 'overlap' : ''} ${t.status === 'done' ? 'done' : ''}" style="top:${top}px;height:${height}px" onclick="openTaskDetail('${t.id}')">
+      // Sự kiện Google Calendar (read-only) phủ lên cùng lưới giờ — khóa, không sửa được.
+      const gEvents = gcalEventsOnDay(selectedDate);
+      const gTimed = gEvents.filter(ev => !ev.allDay && ev.start);
+      // Gộp task local + sự kiện Google vào CÙNG phép chia làn để chúng không đè lên nhau.
+      const laneItems = [
+        ...tasks.map(t => ({ s: minOf(t.start), e: Math.max(minOf(t.end), minOf(t.start) + 5), kind: 'task', t })),
+        ...gTimed.map(ev => { const s = minOf(ev.start), e = ev.end ? minOf(ev.end) : (s + 60); return { s, e: Math.max(e, s + 30), kind: 'gcal', ev }; }),
+      ];
+      const layout = computeLaneLayout(laneItems);
+      const blocks = laneItems.map((it, i) => {
+        const pos = laneStyle(layout[i].lane, layout[i].lanes, 64, 10);
+        if (it.kind === 'task') {
+          const t = it.t;
+          const top = (minOf(t.start) / 60) * hourH;
+          const height = Math.max(42, ((minOf(t.end) - minOf(t.start)) / 60) * hourH - 4);
+          return `<div class="tblock ${t.priority} ${overlaps.has(t.id) ? 'overlap' : ''} ${t.status === 'done' ? 'done' : ''}" style="top:${top}px;height:${height}px;${pos}" onclick="openTaskDetail('${t.id}')">
           <div class="name">${esc(t.title)}</div>
           <div class="meta">${t.start}-${t.end} · ${t.duration}m ${t.mission ? '· Việc chính' : ''}</div>
         </div>`;
-      }).join('');
-      // Sự kiện Google Calendar (read-only) phủ lên cùng lưới giờ — khóa, không sửa được.
-      const gEvents = gcalEventsOnDay(selectedDate);
-      const gBlocks = gEvents.filter(ev => !ev.allDay && ev.start).map(ev => {
+        }
+        const ev = it.ev;
         const s = minOf(ev.start), e = ev.end ? minOf(ev.end) : (s + 60);
         const top = (s / 60) * hourH;
         const height = Math.max(28, ((Math.max(e, s + 30) - s) / 60) * hourH - 4);
-        return `<div class="tblock gcalItem" style="top:${top}px;height:${height}px;--cal:${esc(ev.color)}" title="Google: ${esc(ev.title)} · ${esc(ev.start)}${ev.end ? '-' + esc(ev.end) : ''}" onclick="openGcalEvent('${esc(ev.gcalId)}','${esc(selectedDate)}')">
+        return `<div class="tblock gcalItem" style="top:${top}px;height:${height}px;--cal:${esc(ev.color)};${pos}" title="Google: ${esc(ev.title)} · ${esc(ev.start)}${ev.end ? '-' + esc(ev.end) : ''}" onclick="openGcalEvent('${esc(ev.gcalId)}','${esc(selectedDate)}')">
           <div class="name"><span class="gcalLock" aria-hidden="true">🔒</span>${esc(ev.title)}</div>
           <div class="meta">${esc(ev.start)}${ev.end ? '-' + esc(ev.end) : ''} · Google</div>
         </div>`;
@@ -1249,7 +1259,7 @@ ${commandCenter}
               <span class="pill ${overlaps.size ? 'dangerText' : ''}">Overlap: ${overlaps.size}</span>
             </div>
             ${gAllDayRow}
-            <div class="timelineWrap" id="timelineWrap" onclick="timelineClick(event)">${hours}${line}${blocks}${gBlocks}</div>
+            <div class="timelineWrap" id="timelineWrap" onclick="timelineClick(event)">${hours}${line}${blocks}</div>
           </div>
           <div class="card"><h3>Chưa xếp giờ</h3><div class="list">${uns.length ? uns.map(t => taskMini(t)).join('') : '<div class="muted">Không có task chưa xếp giờ.</div>'}</div></div>
         </div>`;
@@ -1294,6 +1304,49 @@ ${commandCenter}
         }
       }
       return set;
+    }
+    // Chia làn (kiểu Google Calendar) cho các khối trùng giờ: mỗi cụm trùng nhau
+    // được tách thành N cột song song để không khối nào đè lên khối khác.
+    // input: [{ s, e }] (phút). Trả mảng cùng index: { lane, lanes }.
+    function computeLaneLayout(items) {
+      const out = new Array(items.length);
+      if (!items.length) return out;
+      const order = items.map((_, i) => i).sort((a, b) => items[a].s - items[b].s || items[a].e - items[b].e);
+      let cluster = [];
+      let clusterMaxEnd = -1;
+      const flush = () => {
+        const colEnds = []; // giờ kết thúc của khối cuối trên từng cột
+        for (const i of cluster) {
+          let placed = -1;
+          for (let c = 0; c < colEnds.length; c++) {
+            if (items[i].s >= colEnds[c]) { placed = c; break; } // cột này đã trống
+          }
+          if (placed === -1) { placed = colEnds.length; colEnds.push(0); }
+          colEnds[placed] = items[i].e;
+          out[i] = { lane: placed, lanes: 0 }; // lanes điền sau khi biết tổng số cột
+        }
+        const lanes = colEnds.length;
+        for (const i of cluster) out[i].lanes = lanes;
+        cluster = [];
+        clusterMaxEnd = -1;
+      };
+      for (const i of order) {
+        if (cluster.length && items[i].s >= clusterMaxEnd) flush(); // hết cụm trùng → chốt cụm
+        cluster.push(i);
+        clusterMaxEnd = Math.max(clusterMaxEnd, items[i].e);
+      }
+      if (cluster.length) flush();
+      return out;
+    }
+    // CSS định vị 1 khối theo làn. Khi chỉ có 1 làn (không trùng) trả '' để giữ
+    // nguyên hành vi full-width cũ (left/right cố định trong CSS). gL/gR: lề trái/phải px.
+    function laneStyle(lane, lanes, gL, gR) {
+      if (!lanes || lanes <= 1) return '';
+      const gap = 3; // khe giữa các làn
+      const reserved = gL + gR;
+      const left = `calc(${gL}px + ${lane} * (100% - ${reserved}px) / ${lanes})`;
+      const width = `calc((100% - ${reserved}px) / ${lanes} - ${gap}px)`;
+      return `left:${left};width:${width};right:auto;`;
     }
     function timelineClick(e) { const area = e.target.closest('.hourArea'); if (!area || e.target.closest('.tblock')) return; openTask(null, { date: selectedDate, start: timeOfMin(Number(area.dataset.hour) * 60), duration: 60 }) }
     function taskText(t) { const f = ensureFlow(t); return [t.title, t.notes, projectName(t.projectId), goalName(t.goalId), t.impact, t.energy, ...(t.tags || []), f.summary, ...f.checklist.map(x => x.text), ...f.notes.map(x => x.text), ...f.blockers.map(x => x.text), ...f.nextActions.map(x => x.text)].join(' ').toLowerCase() }
@@ -1841,11 +1894,13 @@ ${commandCenter}
       const when = ev.allDay ? '' : ` · ${esc(ev.start)}`;
       return `<span class="wkChip gcalItem" style="--cal:${esc(ev.color)}" title="Google: ${esc(ev.title)}${when}" onclick="event.stopPropagation();openGcalEvent('${esc(ev.gcalId)}','${esc(ev.date)}')"><span class="gcalLock" aria-hidden="true">🔒</span>${esc(ev.title)}</span>`;
     }
-    function gcalTimeBlockHTML(ev, fd) {
+    function gcalTimeBlockHTML(ev, fd, laneInfo) {
       const s = minOf(ev.start), e = ev.end ? minOf(ev.end) : (s + 60);
       const top = Math.max(0, ((s - WEEK_START_HOUR * 60) / 60) * WEEK_HOUR_H);
       const height = Math.max(20, ((Math.max(e, s + 30) - s) / 60) * WEEK_HOUR_H - 2);
-      return `<div class="wkBlock gcalItem" style="top:${top}px;height:${height}px;--cal:${esc(ev.color)}" title="Google: ${esc(ev.title)} · ${esc(ev.start)}${ev.end ? '-' + esc(ev.end) : ''}" onclick="event.stopPropagation();openGcalEvent('${esc(ev.gcalId)}','${esc(fd)}')">
+      const li = laneInfo || { lane: 0, lanes: 1 };
+      const pos = laneStyle(li.lane, li.lanes, 2, 2);
+      return `<div class="wkBlock gcalItem" style="top:${top}px;height:${height}px;--cal:${esc(ev.color)};${pos}" title="Google: ${esc(ev.title)} · ${esc(ev.start)}${ev.end ? '-' + esc(ev.end) : ''}" onclick="event.stopPropagation();openGcalEvent('${esc(ev.gcalId)}','${esc(fd)}')">
         <div class="wkBlockName"><span class="gcalLock" aria-hidden="true">🔒</span>${esc(ev.title)}</div>
         <div class="wkBlockTime">${esc(ev.start)}${ev.end ? '-' + esc(ev.end) : ''}</div>
       </div>`;
@@ -1947,12 +2002,14 @@ ${commandCenter}
     }
 
     // ── Khối thời gian (dùng chung cho view tuần & ngày) ──────────────────────
-    function timeBlockHTML(t) {
+    function timeBlockHTML(t, laneInfo) {
       const s = minOf(t.start), e = minOf(t.end);
       const top = Math.max(0, ((s - WEEK_START_HOUR * 60) / 60) * WEEK_HOUR_H);
       const height = Math.max(20, ((e - s) / 60) * WEEK_HOUR_H - 2);
       const color = t.calendarId ? calendarColor(t.calendarId) : (t.status === 'done' ? 'var(--ok)' : t.status === 'stack' ? 'var(--warn)' : 'var(--brand2)');
-      return `<div class="wkBlock ${t.status === 'done' ? 'done' : ''}" style="top:${top}px;height:${height}px;--cal:${color}" title="${esc(t.title)} · ${esc(t.start)}-${esc(t.end)}" onclick="event.stopPropagation();openTaskDetail('${t.id}')">
+      const li = laneInfo || { lane: 0, lanes: 1 };
+      const pos = laneStyle(li.lane, li.lanes, 2, 2);
+      return `<div class="wkBlock ${t.status === 'done' ? 'done' : ''}" style="top:${top}px;height:${height}px;--cal:${color};${pos}" title="${esc(t.title)} · ${esc(t.start)}-${esc(t.end)}" onclick="event.stopPropagation();openTaskDetail('${t.id}')">
         <div class="wkBlockName">${esc(t.title)}</div>
         <div class="wkBlockTime">${esc(t.start)}-${esc(t.end)}</div>
       </div>`;
@@ -1975,8 +2032,17 @@ ${commandCenter}
       const today = fmtDate(new Date());
       let grid = '';
       for (let hr = WEEK_START_HOUR; hr < 24; hr++) grid += `<div class="wkCell" style="height:${WEEK_HOUR_H}px" onclick="quickCreateAt('${fd}',${hr})"></div>`;
-      const blocks = timedTasksOnDay(fd).map(timeBlockHTML).join('')
-        + gcalEventsOnDay(fd).filter(ev => !ev.allDay && ev.start).map(ev => gcalTimeBlockHTML(ev, fd)).join('');
+      // Gộp task local + sự kiện Google của ngày vào cùng phép chia làn để không khối nào đè khối nào.
+      const tTasks = timedTasksOnDay(fd);
+      const tGcal = gcalEventsOnDay(fd).filter(ev => !ev.allDay && ev.start);
+      const laneItems = [
+        ...tTasks.map(t => ({ s: minOf(t.start), e: Math.max(minOf(t.end), minOf(t.start) + 5), kind: 'task', t })),
+        ...tGcal.map(ev => { const s = minOf(ev.start), e = ev.end ? minOf(ev.end) : (s + 60); return { s, e: Math.max(e, s + 30), kind: 'gcal', ev }; }),
+      ];
+      const laneLayout = computeLaneLayout(laneItems);
+      const blocks = laneItems.map((it, i) => it.kind === 'task'
+        ? timeBlockHTML(it.t, laneLayout[i])
+        : gcalTimeBlockHTML(it.ev, fd, laneLayout[i])).join('');
       const header = withHeader
         ? `<div class="wkColHead ${fd === today ? 'today' : ''} ${fd === selectedDate ? 'sel' : ''}" onclick="selectCalendarDay('${fd}')"><span class="wkDow">${DOW_LABELS[(parseDate(fd).getDay() + 6) % 7]}</span><span class="wkDate">${parseDate(fd).getDate()}</span></div>`
         : '';

@@ -30,6 +30,11 @@
 
 const API_BASE = 'https://www.googleapis.com/calendar/v3';
 const VISIBILITY_KEY = 'tlf_gcal_hidden_v1'; // tập calId bị ẩn (lưu riêng, KHÔNG đụng storage.js)
+// Cache token + danh sách lịch vào localStorage để reload/đổi view không phải gọi
+// lại server (token) và Google (calendarList) → mở app gần như tức thì.
+const TOKEN_CACHE_KEY = 'tlf_gcal_token_v1';
+const CALS_CACHE_KEY = 'tlf_gcal_cals_v1';
+const CALS_TTL_MS = 12 * 60 * 60 * 1000; // danh sách lịch ít đổi → cache 12h, vẫn refresh nền
 // Token Google thực tế ~3600s; trừ hao 5 phút để tránh dùng sát giờ hết hạn.
 const EXPIRY_SKEW_MS = 5 * 60 * 1000;
 const MAX_EVENTS_PER_CAL = 250;
@@ -61,9 +66,51 @@ async function firebaseIdToken() {
   try { return await u.getIdToken(); } catch { return null; }
 }
 
+// uid hiện tại — dùng để gắn cache theo từng user (tránh dùng nhầm token/lịch
+// của user khác khi đăng xuất rồi đăng nhập tài khoản mới trên cùng máy).
+function currentUid() {
+  const u = window.auth && window.auth.currentUser;
+  return u && u.uid ? String(u.uid) : '';
+}
+
+// ── localStorage cache: token + danh sách lịch ───────────────────────────────
+function persistToken() {
+  try {
+    if (accessToken && tokenExpiresAt) {
+      localStorage.setItem(TOKEN_CACHE_KEY, JSON.stringify({ uid: currentUid(), token: accessToken, expiresAt: tokenExpiresAt }));
+    }
+  } catch { /* ignore */ }
+}
+function restoreToken() {
+  try {
+    const j = JSON.parse(localStorage.getItem(TOKEN_CACHE_KEY) || 'null');
+    if (j && j.token && j.expiresAt && j.uid === currentUid() && Date.now() < (j.expiresAt - EXPIRY_SKEW_MS)) {
+      accessToken = j.token;
+      tokenExpiresAt = j.expiresAt;
+      return true;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+function persistCalendars() {
+  try { localStorage.setItem(CALS_CACHE_KEY, JSON.stringify({ uid: currentUid(), ts: Date.now(), items: calendarsCache })); } catch { /* ignore */ }
+}
+function restoreCalendars() {
+  if (calendarsCache.length) return true;
+  try {
+    const j = JSON.parse(localStorage.getItem(CALS_CACHE_KEY) || 'null');
+    if (j && Array.isArray(j.items) && j.items.length && j.uid === currentUid() && (Date.now() - j.ts) < CALS_TTL_MS) {
+      calendarsCache = j.items;
+      return true;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
 function clearToken() {
   accessToken = null;
   tokenExpiresAt = 0;
+  try { localStorage.removeItem(TOKEN_CACHE_KEY); } catch { /* ignore */ }
 }
 
 function hasValidToken() {
@@ -74,6 +121,7 @@ let tokenFetchInflight = null;
 /** Đảm bảo có access token hợp lệ — xin server cấp nếu thiếu/hết hạn. Trả bool. */
 async function ensureToken() {
   if (hasValidToken()) return true;
+  if (restoreToken()) return true; // token còn hạn trong localStorage → khỏi gọi server
   if (!serverConnected()) return false;
   if (!tokenFetchInflight) {
     tokenFetchInflight = (async () => {
@@ -95,6 +143,7 @@ async function ensureToken() {
       accessToken = j.access_token;
       const ttl = Number(j.expires_in) > 0 ? Number(j.expires_in) : 3600;
       tokenExpiresAt = Date.now() + ttl * 1000;
+      persistToken(); // lưu để reload sau dùng lại, khỏi gọi /api/gcal/token
       return true;
     })().finally(() => { tokenFetchInflight = null; });
   }
@@ -113,9 +162,11 @@ window.gcalIsConnected = function gcalIsConnected() {
 /** Nạp token + danh sách lịch sau khi kết nối (app.js gọi sau connect & khi khởi động). */
 window.gcalActivateDisplay = async function gcalActivateDisplay() {
   if (!serverConnected()) return false;
+  // Có sẵn danh sách lịch từ cache → render ngay, không chờ Google trả về.
+  if (restoreCalendars()) emit('gcal-state-change');
   const ok = await ensureToken();
   if (!ok) return false;
-  try { await window.gcalListCalendars(); } catch { /* đã xử lý nội bộ */ }
+  try { await window.gcalListCalendars(); } catch { /* đã xử lý nội bộ */ } // refresh nền
   return true;
 };
 
@@ -136,6 +187,7 @@ window.gcalConnect = async function gcalConnect() {
 window.gcalDisconnect = function gcalDisconnect() {
   // Xoá cache hiển thị + token cục bộ. (Cờ kết nối server do gcalServerDisconnect lo.)
   clearToken();
+  try { localStorage.removeItem(CALS_CACHE_KEY); } catch { /* ignore */ }
   calendarsCache = [];
   eventsByDay = new Map();
   lastFetchKey = '';
@@ -263,6 +315,7 @@ window.gcalListCalendars = async function gcalListCalendars() {
     backgroundColor: typeof c.backgroundColor === 'string' ? c.backgroundColor : '#4285f4',
     primary: !!c.primary,
   })).filter((c) => c.id);
+  persistCalendars(); // cache để phiên/đổi view sau khỏi gọi lại Google
   emit('gcal-state-change');
   return calendarsCache.slice();
 };
@@ -299,37 +352,42 @@ window.gcalEnsureEvents = async function gcalEnsureEvents(timeMinISO, timeMaxISO
 };
 
 async function fetchEventsRange(timeMinISO, timeMaxISO, key) {
-  // Đảm bảo có danh sách lịch trước (cần để biết màu + calId).
+  // Đảm bảo có danh sách lịch trước (cần để biết màu + calId). Ưu tiên cache.
+  if (!calendarsCache.length) restoreCalendars();
   if (!calendarsCache.length) {
     await window.gcalListCalendars();
     if (!serverConnected()) return; // mất kết nối server giữa chừng
   }
-  const targets = calendarsCache.length ? calendarsCache : [{ id: 'primary', summary: 'primary', backgroundColor: '#4285f4' }];
+  const targets = (calendarsCache.length ? calendarsCache : [{ id: 'primary', summary: 'primary', backgroundColor: '#4285f4' }])
+    .filter((cal) => window.gcalIsCalendarVisible(cal.id)); // không tốn quota cho lịch đang ẩn
+
+  // Mint token MỘT lần trước khi bắn song song (tránh N request đua nhau gọi /token).
+  if (!(await ensureToken())) {
+    reportError({ kind: 'no-token', message: 'Chưa kết nối Google Calendar.' });
+    return;
+  }
+
+  const buildQuery = () => new URLSearchParams({
+    singleEvents: 'true',
+    orderBy: 'startTime',
+    timeMin: timeMinISO,
+    timeMax: timeMaxISO,
+    maxResults: String(MAX_EVENTS_PER_CAL),
+  }).toString();
+
+  // Fetch tất cả lịch SONG SONG thay vì tuần tự → với nhiều lịch nhanh hơn hẳn.
+  const results = await Promise.all(targets.map((cal) =>
+    apiFetch(`/calendars/${encodeURIComponent(cal.id)}/events?${buildQuery()}`).then((r) => ({ cal, r }))
+  ));
 
   const nextByDay = new Map();
   let anyError = null;
-
-  for (const cal of targets) {
-    if (!window.gcalIsCalendarVisible(cal.id)) continue; // không tốn quota cho lịch đang ẩn
-    const q = new URLSearchParams({
-      singleEvents: 'true',
-      orderBy: 'startTime',
-      timeMin: timeMinISO,
-      timeMax: timeMaxISO,
-      maxResults: String(MAX_EVENTS_PER_CAL),
-    });
-    const result = await apiFetch(`/calendars/${encodeURIComponent(cal.id)}/events?${q.toString()}`);
-    if (!result.ok) {
-      anyError = result.error;
-      // auth/api-disabled là lỗi toàn cục → dừng sớm, không lặp các lịch khác.
-      if (result.error.kind === 'auth' || result.error.kind === 'no-token' || result.error.kind === 'api-disabled') break;
-      continue;
-    }
-    const items = Array.isArray(result.data?.items) ? result.data.items : [];
+  for (const { cal, r } of results) {
+    if (!r.ok) { anyError = r.error; continue; }
+    const items = Array.isArray(r.data?.items) ? r.data.items : [];
     for (const raw of items) {
       const ev = normalizeEvent(raw, cal);
-      if (!ev) continue;
-      bucketEventByDay(ev, nextByDay);
+      if (ev) bucketEventByDay(ev, nextByDay);
     }
   }
 
