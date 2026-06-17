@@ -9,7 +9,13 @@
 
 // Write scope: lets the app create/update/delete events. Sensitive scope — keep
 // the OAuth consent screen in Testing with explicit test users until verified.
-const SCOPES = ['https://www.googleapis.com/auth/calendar.events'];
+// - calendar.events: tạo/sửa/xoá event (đồng bộ 2 chiều App↔Google).
+// - calendar.readonly: liệt kê calendarList + đọc event mọi lịch để HIỂN THỊ lịch
+//   Google trong app qua access token server cấp (gộp read-only vào 1 kết nối).
+const SCOPES = [
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.readonly',
+];
 
 // Dedicated Google calendar the app writes into (never the user's primary).
 const APP_CALENDAR_SUMMARY = 'Timeline Focus';

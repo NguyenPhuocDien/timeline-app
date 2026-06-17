@@ -20,7 +20,7 @@
  * → updateViaCache: 'none' đảm bảo SW file luôn fetch từ network (không cache SW)
  */
 
-const CACHE_VERSION = 'tlf-v26';
+const CACHE_VERSION = 'tlf-v27';
 const CACHE_NAME = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 

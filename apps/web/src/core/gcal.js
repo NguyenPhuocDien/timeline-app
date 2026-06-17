@@ -28,9 +28,7 @@
  *   'gcal-events-change' → cache sự kiện đã cập nhật
  */
 
-const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 const API_BASE = 'https://www.googleapis.com/calendar/v3';
-const TOKEN_STORE_KEY = 'tlf_gcal_token_v1';
 const VISIBILITY_KEY = 'tlf_gcal_hidden_v1'; // tập calId bị ẩn (lưu riêng, KHÔNG đụng storage.js)
 // Token Google thực tế ~3600s; trừ hao 5 phút để tránh dùng sát giờ hết hạn.
 const EXPIRY_SKEW_MS = 5 * 60 * 1000;
@@ -46,122 +44,103 @@ let eventsByDay = new Map();
 let lastFetchKey = '';
 let inflightFetch = null;
 
-restoreTokenFromSession();
+// ════════════════════════════════════════════════════════════════════════════
+// TOKEN — server cấp (không còn popup OAuth phía client)
+// ════════════════════════════════════════════════════════════════════════════
+// Access token để gọi Google REST trực tiếp KHÔNG còn lấy từ popup nữa. SERVER
+// (giữ refresh token sống mãi) mint token tươi qua /api/gcal/token mỗi khi cần →
+// user kết nối Google MỘT LẦN là dùng mãi, không phải đăng nhập/cấp quyền lại.
 
-// ════════════════════════════════════════════════════════════════════════════
-// TOKEN
-// ════════════════════════════════════════════════════════════════════════════
-function restoreTokenFromSession() {
-  try {
-    const raw = sessionStorage.getItem(TOKEN_STORE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.token === 'string' && Number.isFinite(parsed.expiresAt)) {
-      accessToken = parsed.token;
-      tokenExpiresAt = parsed.expiresAt;
-    }
-  } catch {
-    /* sessionStorage không khả dụng / parse lỗi → coi như chưa kết nối */
-  }
+function serverConnected() {
+  return typeof window.gcalServerIsConnected === 'function' && window.gcalServerIsConnected();
 }
 
-function persistToken() {
-  try {
-    if (accessToken) {
-      sessionStorage.setItem(TOKEN_STORE_KEY, JSON.stringify({ token: accessToken, expiresAt: tokenExpiresAt }));
-    } else {
-      sessionStorage.removeItem(TOKEN_STORE_KEY);
-    }
-  } catch {
-    /* bỏ qua: token vẫn sống trong memory cho phiên hiện tại */
-  }
-}
-
-function setToken(token, expiresInSeconds) {
-  accessToken = token || null;
-  // Mặc định 3600s nếu Google không trả expiresIn.
-  const ttl = Number.isFinite(expiresInSeconds) && expiresInSeconds > 0 ? expiresInSeconds : 3600;
-  tokenExpiresAt = token ? Date.now() + ttl * 1000 : 0;
-  persistToken();
+async function firebaseIdToken() {
+  const u = window.auth && window.auth.currentUser;
+  if (!u || typeof u.getIdToken !== 'function') return null;
+  try { return await u.getIdToken(); } catch { return null; }
 }
 
 function clearToken() {
   accessToken = null;
   tokenExpiresAt = 0;
-  persistToken();
 }
 
 function hasValidToken() {
   return !!accessToken && Date.now() < (tokenExpiresAt - EXPIRY_SKEW_MS);
 }
 
+let tokenFetchInflight = null;
+/** Đảm bảo có access token hợp lệ — xin server cấp nếu thiếu/hết hạn. Trả bool. */
+async function ensureToken() {
+  if (hasValidToken()) return true;
+  if (!serverConnected()) return false;
+  if (!tokenFetchInflight) {
+    tokenFetchInflight = (async () => {
+      const idt = await firebaseIdToken();
+      if (!idt) return false;
+      let res;
+      try {
+        res = await fetch('/api/gcal/token', { headers: { Authorization: 'Bearer ' + idt } });
+      } catch { return false; }
+      if (res.status === 409) {
+        // Refresh token bị thu hồi/hết hiệu lực → coi như ngắt kết nối.
+        if (typeof window.gcalServerDisconnect === 'function') window.gcalServerDisconnect();
+        emit('gcal-state-change');
+        return false;
+      }
+      if (!res.ok) return false;
+      let j; try { j = await res.json(); } catch { return false; }
+      if (!j || !j.access_token) return false;
+      accessToken = j.access_token;
+      const ttl = Number(j.expires_in) > 0 ? Number(j.expires_in) : 3600;
+      tokenExpiresAt = Date.now() + ttl * 1000;
+      return true;
+    })().finally(() => { tokenFetchInflight = null; });
+  }
+  return tokenFetchInflight;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // PUBLIC: CONNECT / DISCONNECT / STATUS
 // ════════════════════════════════════════════════════════════════════════════
+// Trạng thái "đã kết nối" = đã kết nối Google qua server (nhớ mãi), không phụ
+// thuộc token tức thời (token sẽ được xin khi cần).
 window.gcalIsConnected = function gcalIsConnected() {
-  return hasValidToken();
+  return serverConnected();
+};
+
+/** Nạp token + danh sách lịch sau khi kết nối (app.js gọi sau connect & khi khởi động). */
+window.gcalActivateDisplay = async function gcalActivateDisplay() {
+  if (!serverConnected()) return false;
+  const ok = await ensureToken();
+  if (!ok) return false;
+  try { await window.gcalListCalendars(); } catch { /* đã xử lý nội bộ */ }
+  return true;
 };
 
 window.gcalConnect = async function gcalConnect() {
-  // Cần Firebase Auth (GoogleAuthProvider) — sync-engine expose window.auth.
-  const auth = window.auth;
-  const fb = window.firebaseAuthApi;
-  if (!auth || !fb || typeof fb.GoogleAuthProvider !== 'function') {
+  // Kết nối DUY NHẤT: OAuth phía server (lấy refresh token, scope đọc + ghi). Sau
+  // đó server cấp access token cho hiển thị; đồng bộ 2 chiều cũng dùng chung kết nối.
+  if (typeof window.gcalServerConnect !== 'function') {
     notify('Đồng bộ chưa sẵn sàng, thử lại sau vài giây.');
     return false;
   }
-
-  const provider = new fb.GoogleAuthProvider();
-  provider.addScope(CALENDAR_SCOPE);
-  // Buộc Google hiện màn hình đồng ý để chắc chắn cấp scope calendar.
-  provider.setCustomParameters({ prompt: 'consent' });
-
-  try {
-    let result;
-    const user = auth.currentUser;
-    if (user && typeof fb.reauthenticateWithPopup === 'function') {
-      // User đã đăng nhập Firebase → reauthenticate (cùng tài khoản) để xin thêm scope.
-      result = await fb.reauthenticateWithPopup(user, provider);
-    } else {
-      result = await fb.signInWithPopup(auth, provider);
-    }
-
-    const credential = fb.GoogleAuthProvider.credentialFromResult(result);
-    const token = credential?.accessToken;
-    if (!token) {
-      notify('Google không trả về quyền Lịch. Hãy thử lại và chấp nhận quyền truy cập Calendar.');
-      return false;
-    }
-    setToken(token, 3600);
-    emit('gcal-state-change');
-    // Nạp danh sách lịch ngay để panel hiển thị.
-    try { await window.gcalListCalendars(); } catch { /* lỗi đã được xử lý bên trong */ }
-    notify('Đã kết nối Google Calendar (chỉ đọc).');
-    return true;
-  } catch (err) {
-    const code = err?.code || '';
-    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-      notify('Đã hủy kết nối Google Calendar.');
-    } else if (code === 'auth/popup-blocked') {
-      notify('Popup bị chặn. Hãy cho phép popup rồi thử lại.');
-    } else if (code === 'auth/user-mismatch' || code === 'auth/credential-already-in-use') {
-      notify('Tài khoản Google không khớp tài khoản đang đăng nhập đồng bộ.');
-    } else {
-      notify('Kết nối Google Calendar thất bại: ' + (err?.message || String(err)));
-      if (window.Sentry) window.Sentry.captureException(err);
-    }
-    return false;
-  }
+  const ok = await window.gcalServerConnect();
+  if (!ok) return false;
+  emit('gcal-state-change');
+  await window.gcalActivateDisplay(); // nạp token + danh sách lịch để hiển thị ngay
+  return true;
 };
 
 window.gcalDisconnect = function gcalDisconnect() {
+  // Xoá cache hiển thị + token cục bộ. (Cờ kết nối server do gcalServerDisconnect lo.)
   clearToken();
   calendarsCache = [];
   eventsByDay = new Map();
   lastFetchKey = '';
   emit('gcal-state-change');
   emit('gcal-events-change');
-  notify('Đã ngắt kết nối Google Calendar.');
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -201,8 +180,8 @@ window.gcalSetCalendarVisible = function gcalSetCalendarVisible(calId, visible) 
  *   error.kind ∈ 'no-token' | 'auth' | 'api-disabled' | 'network' | 'http'
  */
 async function apiFetch(pathAndQuery) {
-  if (!hasValidToken()) {
-    return { ok: false, error: { kind: 'no-token', message: 'Phiên Google đã hết hạn.' } };
+  if (!(await ensureToken())) {
+    return { ok: false, error: { kind: 'no-token', message: 'Chưa kết nối Google Calendar.' } };
   }
   let res;
   try {
@@ -304,7 +283,7 @@ window.gcalGetEventsForDay = function gcalGetEventsForDay(dateStr) {
  * khoảng để tránh spam khi user đổi view liên tục. Trả Promise<void>.
  */
 window.gcalEnsureEvents = async function gcalEnsureEvents(timeMinISO, timeMaxISO, force = false) {
-  if (!hasValidToken()) return;
+  if (!serverConnected()) return;
   const key = `${timeMinISO}|${timeMaxISO}`;
   if (!force && key === lastFetchKey && eventsByDay.size) return; // đã có dữ liệu cho khoảng này
   // Nếu đang fetch khoảng này rồi → chờ promise đó.
@@ -323,7 +302,7 @@ async function fetchEventsRange(timeMinISO, timeMaxISO, key) {
   // Đảm bảo có danh sách lịch trước (cần để biết màu + calId).
   if (!calendarsCache.length) {
     await window.gcalListCalendars();
-    if (!hasValidToken()) return; // listCalendars có thể đã clear token nếu 401
+    if (!serverConnected()) return; // mất kết nối server giữa chừng
   }
   const targets = calendarsCache.length ? calendarsCache : [{ id: 'primary', summary: 'primary', backgroundColor: '#4285f4' }];
 

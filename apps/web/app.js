@@ -776,7 +776,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       // Register SW
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker
-          .register('./sw.js?v=26', { updateViaCache: 'none' })
+          .register('./sw.js?v=27', { updateViaCache: 'none' })
           .catch(err => console.warn('[SW]', err));
       }
     }
@@ -875,9 +875,20 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
 
       // Google Calendar (Phase 2): khi gcal.js cập nhật token/lịch/sự kiện → re-render
       // nếu đang ở tab Lịch hoặc Timeline (hai nơi hiển thị sự kiện Google).
-      const onGcalChange = () => { if (currentTab === 'calendar' || currentTab === 'timeline') render(); };
+      const onGcalChange = () => { if (currentTab === 'calendar' || currentTab === 'timeline' || currentTab === 'settings') render(); };
       document.addEventListener('gcal-state-change', onGcalChange);
       document.addEventListener('gcal-events-change', onGcalChange);
+
+      // Đã kết nối Google từ trước → nạp token + danh sách lịch để hiển thị ngay
+      // khi phiên đăng nhập sẵn sàng (server cấp token, không cần popup lại).
+      (function activateGcalWhenReady(tries) {
+        if (typeof window.gcalIsConnected !== 'function' || !window.gcalIsConnected()) return;
+        if (window.auth && window.auth.currentUser && typeof window.gcalActivateDisplay === 'function') {
+          window.gcalActivateDisplay().then((ok) => { if (ok) ensureGcalForCurrentView(); }).catch(() => {});
+        } else if ((tries || 0) < 20) {
+          setTimeout(() => activateGcalWhenReady((tries || 0) + 1), 500);
+        }
+      })(0);
     }
     function render() {
       window.currentTab = currentTab;
@@ -2004,31 +2015,17 @@ ${commandCenter}
             ${c.system ? '' : `<button class="iconBtn" title="Xóa" onclick="deleteCalendar('${esc(c.id)}')">✕</button>`}
           </span>
         </li>`).join('');
-      return `<div class="card calPanel"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="margin:0">Lịch của tôi</h3><button class="btn sm" onclick="addCalendar()">${uiIcon('plus')}</button></div><ul class="calList">${rows}</ul>${googleCalendarsPanelHTML()}${googleTwoWayPanelHTML()}</div>`;
+      return `<div class="card calPanel"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="margin:0">Lịch của tôi</h3><button class="btn sm" onclick="addCalendar()">${uiIcon('plus')}</button></div><ul class="calList">${rows}</ul>${googleCalendarsPanelHTML()}</div>`;
     }
-    // Đồng bộ 2 chiều (beta) — ghi task/event của app lên Google + nhận thay đổi ngược.
-    function googleTwoWayPanelHTML() {
-      const on = typeof window.gcalServerIsConnected === 'function' && window.gcalServerIsConnected();
-      if (on) {
-        return `<div class="gcalSection">
-          <div class="gcalHead"><span class="gcalBadge">2 chiều</span> Đồng bộ 2 chiều <span class="pill">đang bật</span></div>
-          <p class="muted small" style="margin:6px 0 8px">Task/sự kiện có ngày sẽ tự đẩy lên lịch "Timeline Focus" trên Google.</p>
-          <button class="btn sm secondary" onclick="disconnectGoogleTwoWay()">Tắt đồng bộ 2 chiều</button>
-        </div>`;
-      }
-      return `<div class="gcalSection">
-        <div class="gcalHead"><span class="gcalBadge">2 chiều</span> Đồng bộ 2 chiều <span class="pill">beta</span></div>
-        <p class="muted small" style="margin:6px 0 8px">Ghi task/sự kiện của app lên Google và nhận chỉnh sửa ngược. Cần cấu hình server.</p>
-        <button class="btn sm" onclick="connectGoogleTwoWay()">Bật đồng bộ 2 chiều</button>
-      </div>`;
-    }
-    // Nhóm "Lịch Google" (read-only) trong panel "Lịch của tôi".
+    // Panel "Google Calendar" — MỘT kết nối lo cả hiển thị (đọc) lẫn đồng bộ 2 chiều
+    // (ghi + nhận ngược). Kết nối qua server (refresh token) nên nhớ mãi, không
+    // phải đăng nhập/cấp quyền lại mỗi lần.
     function googleCalendarsPanelHTML() {
       const connected = gcalConnected();
       if (!connected) {
         return `<div class="gcalSection">
-          <div class="gcalHead"><span class="gcalBadge">Google</span> Lịch Google</div>
-          <p class="muted small" style="margin:6px 0 8px">Hiển thị sự kiện từ Google Calendar (chỉ đọc, không ghi ngược).</p>
+          <div class="gcalHead"><span class="gcalBadge">Google</span> Google Calendar</div>
+          <p class="muted small" style="margin:6px 0 8px">Kết nối một lần để xem lịch Google trong app VÀ đồng bộ 2 chiều (task/sự kiện có ngày tự đẩy lên Google, nhận chỉnh sửa ngược). Kết nối được ghi nhớ — không phải đăng nhập lại.</p>
           <button class="btn sm" onclick="connectGoogleCalendar()">Kết nối Google Calendar</button>
         </div>`;
       }
@@ -2044,8 +2041,9 @@ ${commandCenter}
           <span class="calName" title="${esc(c.summary)}">${esc(c.summary)}</span>
         </li>`).join('');
       return `<div class="gcalSection">
-        <div class="gcalHead"><span class="gcalBadge">Google</span> Lịch Google <span class="pill gcalReadonly">chỉ đọc 🔒</span></div>
-        <ul class="calList">${rows || '<li class="muted small" style="padding:4px 2px">Không có lịch nào.</li>'}</ul>
+        <div class="gcalHead"><span class="gcalBadge">Google</span> Google Calendar <span class="pill">2 chiều · đang bật</span></div>
+        <p class="muted small" style="margin:6px 0 8px">Task/sự kiện có ngày tự đẩy lên lịch "Timeline Focus" trên Google và nhận chỉnh sửa ngược. Bỏ tick để ẩn một lịch khỏi app (app không ghi vào lịch cá nhân của bạn 🔒).</p>
+        <ul class="calList">${rows || '<li class="muted small" style="padding:4px 2px">Đang tải danh sách lịch…</li>'}</ul>
         <div class="row" style="gap:6px;margin-top:6px">
           <button class="btn sm secondary" onclick="refreshGoogleCalendar()">Làm mới</button>
           <button class="btn sm secondary" onclick="disconnectGoogleCalendar()">Ngắt kết nối</button>
@@ -2054,21 +2052,15 @@ ${commandCenter}
     }
     async function connectGoogleCalendar() {
       if (typeof window.gcalConnect !== 'function') { toast('Tính năng Google Calendar chưa sẵn sàng.'); return; }
-      const ok = await window.gcalConnect();
-      if (ok) { ensureGcalForCurrentView(); render(); }
+      const ok = await window.gcalConnect(); // server OAuth (1 lần) → kích hoạt hiển thị
+      if (!ok) { render(); return; }
+      if (typeof window.gcalSyncPushAll === 'function') window.gcalSyncPushAll(db); // đẩy task/event hiện có lên Google
+      ensureGcalForCurrentView();
+      render();
     }
     function disconnectGoogleCalendar() {
-      if (typeof window.gcalDisconnect === 'function') window.gcalDisconnect();
-      render();
-    }
-    async function connectGoogleTwoWay() {
-      if (typeof window.gcalServerConnect !== 'function') { toast('Tính năng đồng bộ 2 chiều chưa sẵn sàng.'); return; }
-      const ok = await window.gcalServerConnect();
-      if (ok && typeof window.gcalSyncPushAll === 'function') window.gcalSyncPushAll(db); // đẩy toàn bộ lần đầu
-      render();
-    }
-    function disconnectGoogleTwoWay() {
-      if (typeof window.gcalServerDisconnect === 'function') window.gcalServerDisconnect();
+      if (typeof window.gcalServerDisconnect === 'function') window.gcalServerDisconnect(); // tắt kết nối server
+      if (typeof window.gcalDisconnect === 'function') window.gcalDisconnect();             // xoá cache hiển thị cục bộ
       render();
     }
     function refreshGoogleCalendar() {
