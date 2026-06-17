@@ -106,6 +106,7 @@
   function taskSig(t) { return [t.title, t.date, t.start, t.end, t.duration, t.notes, t.status].join('|'); }
   function eventSig(e) { return [e.title, e.date, e.notes].join('|'); }
   function vals(obj) { return obj ? Object.values(obj) : []; }
+  function idSet(arr) { const s = new Set(); vals(arr).forEach((x) => { if (x && x.id) s.add(x.id); }); return s; }
 
   function baseline(db) {
     const tasks = new Map(), events = new Map();
@@ -129,13 +130,18 @@
       if (t.status === 'deleted') { if (!p || p.sig !== sig) push('task', 'delete', t); }
       else if (!p || p.sig !== sig) push('task', 'upsert', t);
     });
-    prev.tasks.forEach((_p, id) => { if (!db.tasks || !db.tasks[id]) push('task', 'delete', { id }); });
+    // Item biến mất hẳn khỏi db (hard delete): db.tasks là MẢNG nên phải so theo
+    // TẬP id — KHÔNG index bằng db.tasks[id] (id là string → luôn undefined →
+    // trước đây vô tình đẩy lệnh xoá cho MỌI task).
+    const curTaskIds = idSet(db.tasks);
+    prev.tasks.forEach((_p, id) => { if (!curTaskIds.has(id)) push('task', 'delete', { id }); });
     vals(db.events).forEach((e) => {
       if (!e || !e.id) return;
       const sig = eventSig(e); const p = prev.events.get(e.id);
       if (!p || p.sig !== sig) push('event', 'upsert', e);
     });
-    prev.events.forEach((_p, id) => { if (!db.events || !db.events[id]) push('event', 'delete', { id }); });
+    const curEventIds = idSet(db.events);
+    prev.events.forEach((_p, id) => { if (!curEventIds.has(id)) push('event', 'delete', { id }); });
     prev = baseline(db);
   }
 

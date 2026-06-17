@@ -20,40 +20,57 @@
  * → updateViaCache: 'none' đảm bảo SW file luôn fetch từ network (không cache SW)
  */
 
-const CACHE_VERSION = 'tlf-v25';
+const CACHE_VERSION = 'tlf-v26';
 const CACHE_NAME = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
-// Pre-cache các file core khi install
-const PRECACHE_URLS = [
+// Số phiên bản ?v= PHẢI suy từ CACHE_VERSION để luôn khớp index.html (trước đây
+// hard-code ?v=24 không được version:sync cập nhật → SW precache nhầm URL cũ →
+// offline cold-start hỏng). Bump appVersion + sync là tự đồng bộ cả hai.
+const V = CACHE_VERSION.replace(/^tlf-v/, '');
+
+// Core: bắt buộc precache thành công thì SW mới được kích hoạt (app + login chạy
+// được khi offline). schema.js/migration.js import nội bộ nên không gắn ?v=.
+const CORE_URLS = [
   './',
   './index.html',
-  './app.js?v=24',
+  `./app.js?v=${V}`,
   './style.css',
-  './manifest.webmanifest',
   './vendor/dexie.min.js',
-  './src/core/storage.js?v=24',
+  `./src/core/storage.js?v=${V}`,
   './src/core/schema.js',
   './src/core/migration.js',
-  './src/core/sync-engine.js?v=24',
-  './src/core/gcal.js?v=24',
-  './src/core/gcal-sync.js?v=24',
-  './src/core/account-management.js?v=24',
-  './src/ui/sync-indicator.js?v=24',
+  `./src/core/sync-engine.js?v=${V}`,
+];
+
+// Optional: precache "best-effort" — 1 file lỗi KHÔNG được chặn SW kích hoạt
+// (tránh kẹt SW cũ phục vụ index.html cũ vô thời hạn).
+const OPTIONAL_URLS = [
+  './manifest.webmanifest',
+  `./src/integrations/sentry.js?v=${V}`,
+  `./src/core/gcal.js?v=${V}`,
+  `./src/core/gcal-sync.js?v=${V}`,
+  `./src/core/account-management.js?v=${V}`,
+  `./src/ui/sync-indicator.js?v=${V}`,
 ];
 
 // ─── INSTALL ────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      // Core assets are atomic: an incomplete cache must not become active.
-      return Promise.all(
-        PRECACHE_URLS.map((url) =>
-          fetch(url, { cache: 'reload' })
-            .then((res) => {
-              if (res.ok) return cache.put(url, res);
-              throw new Error(`Pre-cache failed: ${url} (${res.status})`);
-            })
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Core atomic: bất kỳ file core nào fail → ném lỗi, SW mới KHÔNG kích hoạt.
+      await Promise.all(
+        CORE_URLS.map((url) =>
+          fetch(url, { cache: 'reload' }).then((res) => {
+            if (res.ok) return cache.put(url, res);
+            throw new Error(`Pre-cache (core) failed: ${url} (${res.status})`);
+          })
+        )
+      );
+      // Optional best-effort: lỗi chỉ log, không chặn kích hoạt.
+      await Promise.allSettled(
+        OPTIONAL_URLS.map((url) =>
+          fetch(url, { cache: 'reload' }).then((res) => (res.ok ? cache.put(url, res) : null))
         )
       );
     }).then(() => self.skipWaiting())
@@ -127,19 +144,17 @@ async function networkFirst(request) {
     const cached = await caches.match(request);
     if (cached) return cached;
 
-    // Cache miss → offline page CHỈ cho navigation (trả HTML cho script/style
-    // sẽ gây lỗi MIME 'text/html is not executable' với nosniff)
+    // Cache miss → offline page CHỈ cho navigation.
     if (request.mode === 'navigate') {
       const indexCache = await caches.match('./index.html');
       if (indexCache) return indexCache;
     }
 
-    // Cuối cùng: trả về error response
-    return new Response('Offline. Không có cached version.', {
-      status: 503,
-      statusText: 'Service Unavailable',
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-    });
+    // Script/style (và mọi thứ khác) khi cache-miss + offline: KHÔNG trả Response
+    // 503 text/plain — với nosniff trình duyệt coi đó là MIME sai và "chạy" một
+    // 503 như module → hỏng cả module graph (nút login mất hàm xử lý). Để lỗi
+    // network nổi lên tự nhiên → trình duyệt báo failed-to-load + thử lại khi reload.
+    throw err;
   }
 }
 

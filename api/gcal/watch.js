@@ -47,9 +47,12 @@ module.exports = async (req, res) => {
     }
 
     const channelId = crypto.randomBytes(16).toString('hex');
+    // Token bí mật xác thực webhook. KHÔNG dùng uid (uid không phải bí mật — lộ ở
+    // client/log/path → ai biết uid+channelId sẽ giả mạo được notification).
+    const channelToken = crypto.randomBytes(24).toString('hex');
     const address = `${appBaseUrl(req)}/api/gcal/webhook`;
-    const { resourceId, expiration } = await watchCalendar(authed, calendarId, channelId, address, uid);
-    await store.saveChannel(channelId, { uid, calendarId, resourceId, expiration });
+    const { resourceId, expiration } = await watchCalendar(authed, calendarId, channelId, address, channelToken);
+    await store.saveChannel(channelId, { uid, calendarId, resourceId, expiration, token: channelToken });
 
     // Seed syncToken: full list lần đầu để các webhook sau chạy incremental.
     const seed = await listChanges(authed, calendarId, null);

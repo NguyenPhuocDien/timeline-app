@@ -28,7 +28,9 @@ module.exports = async (req, res) => {
   try {
     const channel = await store.getChannel(String(channelId));
     if (!channel) return res.status(200).end(); // channel lạ/đã huỷ → bỏ qua
-    if (token && channel.uid && String(token) !== String(channel.uid)) return res.status(200).end();
+    // Bắt buộc token khớp token bí mật của channel (KHÔNG dùng uid). Thiếu token
+    // hoặc sai → từ chối, tránh kẻ lạ ép server pull/ghi đè dữ liệu user.
+    if (!token || String(token) !== String(channel.token || '')) return res.status(200).end();
     if (resourceState === 'sync') return res.status(200).end(); // handshake khởi tạo channel
 
     const tokenDoc = await store.getToken(channel.uid);
@@ -44,6 +46,10 @@ module.exports = async (req, res) => {
   }
 };
 
+// Thay đổi xảy ra trong khoảng này sau khi app push được coi là ECHO của chính
+// app (etag feed có thể khác etag insert/patch nên không đủ tin một mình).
+const PUSH_ECHO_GRACE_MS = 90 * 1000;
+
 async function processChanges(uid, authed, calendarId) {
   const state = await store.getState(uid);
   const syncToken = state && state.syncToken;
@@ -51,39 +57,61 @@ async function processChanges(uid, authed, calendarId) {
   if (result.expired) result = await listChanges(authed, calendarId, null); // syncToken hết hạn → full
 
   let skippedForeign = 0;
+  let failed = 0;
   for (const raw of result.events) {
     const ev = fromGoogleEvent(raw);
     const appId = ev.tlfId; // chỉ event do app tạo mới mang tlfId
     if (!appId) { skippedForeign++; continue; }
-
-    const link = await store.getLink(uid, appId);
-    if (!link) { skippedForeign++; continue; }
-    const coll = link.kind === 'event' ? 'events' : 'tasks';
-    const now = new Date().toISOString();
-
-    if (ev.deleted) {
-      const patch = coll === 'tasks'
-        ? { status: 'deleted', deletedAt: now, updatedAt: now }
-        : { deletedAt: now, updatedAt: now };
-      await store.setAppItem(uid, coll, appId, patch);
-      await store.deleteLink(uid, appId);
-      continue;
+    try {
+      const handled = await applyChange(uid, appId, ev);
+      if (!handled) skippedForeign++;
+    } catch (err) {
+      failed++;
+      console.error(`[gcal/webhook] xử lý event appId=${appId} lỗi:`, err && err.message);
     }
-
-    // Chống loop: etag trùng với lần app vừa đẩy → echo, bỏ qua.
-    if (link.etag && ev.etag && link.etag === ev.etag) continue;
-
-    // User sửa trên Google → cập nhật bản ghi app (merge, giữ field app-only như priority/tags/status).
-    const patch = { title: ev.title, date: ev.date, notes: ev.notes || '', updatedAt: now };
-    if (coll === 'tasks') {
-      patch.start = ev.start || '';
-      patch.end = ev.end || '';
-      if (typeof ev.duration === 'number') patch.duration = ev.duration;
-    }
-    await store.setAppItem(uid, coll, appId, patch);
-    await store.saveLink(uid, appId, { etag: ev.etag || '', gcalId: ev.gcalId });
   }
 
-  if (result.nextSyncToken) await store.saveState(uid, { syncToken: result.nextSyncToken });
-  if (skippedForeign) console.log(`[gcal/webhook] uid=${uid} bỏ qua ${skippedForeign} event không phải do app tạo`);
+  // CHỈ tiến syncToken khi không event nào lỗi — nếu có lỗi, giữ token cũ để lần
+  // webhook sau pull lại (Google luôn nhận 200 nên sẽ không tự retry batch này).
+  if (result.nextSyncToken && failed === 0) await store.saveState(uid, { syncToken: result.nextSyncToken });
+  if (skippedForeign) console.log(`[gcal/webhook] uid=${uid} bỏ qua ${skippedForeign} event (không phải do app / không có link)`);
+  if (failed) console.warn(`[gcal/webhook] uid=${uid} ${failed} event lỗi — giữ syncToken cũ để thử lại`);
+}
+
+/** Áp một thay đổi từ Google về Firestore. Trả true nếu đã xử lý, false nếu bỏ qua. */
+async function applyChange(uid, appId, ev) {
+  const link = await store.getLink(uid, appId);
+  if (!link) return false; // mang tlfId nhưng app không còn link → bỏ qua
+  const coll = link.kind === 'event' ? 'events' : 'tasks';
+  const now = new Date().toISOString();
+
+  if (ev.deleted) {
+    const patch = coll === 'tasks'
+      ? { status: 'deleted', deletedAt: now, updatedAt: now }
+      : { deletedAt: now, updatedAt: now };
+    await store.setAppItem(uid, coll, appId, patch);
+    await store.deleteLink(uid, appId);
+    return true;
+  }
+
+  // Chống loop: (a) etag trùng lần app vừa đẩy, hoặc (b) thay đổi xảy ra ngay sau
+  // khi app push (echo của chính app). Là echo → bỏ qua nhưng vẫn cập nhật etag.
+  const updatedMs = ev.updated ? Date.parse(ev.updated) : 0;
+  const isEcho = (link.etag && ev.etag && link.etag === ev.etag)
+    || (link.lastPushAt && updatedMs && updatedMs <= Number(link.lastPushAt) + PUSH_ECHO_GRACE_MS);
+  if (isEcho) {
+    if (ev.etag && ev.etag !== link.etag) await store.saveLink(uid, appId, { etag: ev.etag, gcalId: ev.gcalId });
+    return true;
+  }
+
+  // User sửa trên Google → cập nhật bản ghi app (merge, giữ field app-only như priority/tags/status).
+  const patch = { title: ev.title, date: ev.date, notes: ev.notes || '', updatedAt: now };
+  if (coll === 'tasks') {
+    patch.start = ev.start || '';
+    patch.end = ev.end || '';
+    if (typeof ev.duration === 'number') patch.duration = ev.duration;
+  }
+  await store.setAppItem(uid, coll, appId, patch);
+  await store.saveLink(uid, appId, { etag: ev.etag || '', gcalId: ev.gcalId });
+  return true;
 }

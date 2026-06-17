@@ -156,7 +156,7 @@ function fromGoogleEvent(raw) {
   const deleted = raw.status === 'cancelled';
   const start = raw.start || {};
   const end = raw.end || {};
-  const out = { gcalId: String(raw.id || ''), etag: raw.etag || '', tlfId: tlfId || null, deleted };
+  const out = { gcalId: String(raw.id || ''), etag: raw.etag || '', updated: raw.updated || '', tlfId: tlfId || null, deleted };
 
   if (deleted) return out;
 

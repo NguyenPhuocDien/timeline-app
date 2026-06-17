@@ -46,11 +46,17 @@ module.exports = async (req, res) => {
       await store.deleteChannel(ch.channelId).catch(() => {});
 
       const channelId = crypto.randomBytes(16).toString('hex');
+      const channelToken = crypto.randomBytes(24).toString('hex');
       const address = `${appBaseUrl(req)}/api/gcal/webhook`;
       try {
-        const { resourceId, expiration } = await watchCalendar(authed, ch.calendarId, channelId, address, ch.uid);
-        await store.saveChannel(channelId, { uid: ch.uid, calendarId: ch.calendarId, resourceId, expiration });
-        await store.saveState(ch.uid, { channelId, resourceId, channelExpiry: expiration });
+        const { resourceId, expiration } = await watchCalendar(authed, ch.calendarId, channelId, address, channelToken);
+        await store.saveChannel(channelId, { uid: ch.uid, calendarId: ch.calendarId, resourceId, expiration, token: channelToken });
+        // Chỉ ghi state nếu channel ta vừa thay đúng là channel hiện hành của user
+        // (tránh đè channel mới hơn do /watch chạy song song tạo ra).
+        const cur = await store.getState(ch.uid);
+        if (!cur || !cur.channelId || cur.channelId === ch.channelId) {
+          await store.saveState(ch.uid, { channelId, resourceId, channelExpiry: expiration });
+        }
         renewed++;
       } catch (err) {
         console.error('[gcal/renew] watch failed for', ch.uid, err);

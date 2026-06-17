@@ -776,7 +776,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       // Register SW
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker
-          .register('./sw.js?v=25', { updateViaCache: 'none' })
+          .register('./sw.js?v=26', { updateViaCache: 'none' })
           .catch(err => console.warn('[SW]', err));
       }
     }
