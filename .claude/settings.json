@@ -3,7 +3,17 @@
     "allow": [
       "Bash(python -)",
       "Bash(node --check apps/web/src/core/sync-engine.js)",
-      "Bash(node --input-type=module --eval \"import\\('file:///' + process.cwd\\(\\).replace\\(/\\\\\\\\\\\\\\\\/g,'/'\\) + '/apps/web/src/core/sync-engine.js'\\).catch\\(e => { if \\(e.message.includes\\('https://'\\)\\) { console.log\\('SYNTAX OK \\(import URL unsupported in node, expected\\)'\\); } else { console.error\\(e.message\\); process.exit\\(1\\); } }\\)\")"
+      "Bash(node --input-type=module --eval \"import\\('file:///' + process.cwd\\(\\).replace\\(/\\\\\\\\\\\\\\\\/g,'/'\\) + '/apps/web/src/core/sync-engine.js'\\).catch\\(e => { if \\(e.message.includes\\('https://'\\)\\) { console.log\\('SYNTAX OK \\(import URL unsupported in node, expected\\)'\\); } else { console.error\\(e.message\\); process.exit\\(1\\); } }\\)\")",
+      "Bash(env)",
+      "Bash(curl -s \"https://timelinefocus.web.app/app.js\")",
+      "Bash(curl -s \"https://timelinefocus.web.app/style.css\")",
+      "Bash(grep -c 'class=\\\\\\\\\"mEvt\\\\|MAX_CHIPS')",
+      "Bash(curl -s \"https://timelinefocus.web.app/sw.js\")",
+      "Bash(git check-ignore *)",
+      "Bash(git restore *)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\GIGA\\.claude\\projects\\c--Users-GIGA-Desktop-timeline-app\\memory"
     ]
   }
 }
