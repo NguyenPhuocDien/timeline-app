@@ -114,6 +114,15 @@ service cloud.firestore {
         allow delete: if isOwner(userId);
       }
 
+      // Google Calendar two-way sync (server-written via Admin SDK).
+      // gcal_links: app<->Google id mapping — client may READ to reconcile, never write.
+      // gcal_tokens / gcal_state hold the encrypted refresh token and sync state;
+      // they are intentionally left to the catch-all below (deny all client access).
+      match /gcal_links/{appId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
       match /{document=**} {
         allow read, write: if false;
       }

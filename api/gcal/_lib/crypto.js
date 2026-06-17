@@ -3,8 +3,8 @@
 /**
  * AES-256-GCM encryption for the Google refresh token at rest in Firestore.
  *
- * The key comes from the GCAL_TOKEN_KEY secret: 32 bytes encoded as base64 or
- * hex. Generate one with:  openssl rand -base64 32
+ * Key comes from the GCAL_TOKEN_KEY env var: 32 bytes as base64 or hex.
+ * Generate one with:  openssl rand -base64 32
  *
  * Ciphertext layout (base64): iv(12) | authTag(16) | encrypted.
  */
@@ -15,8 +15,7 @@ const IV_LEN = 12;
 const TAG_LEN = 16;
 
 function loadKey(rawKey) {
-  if (!rawKey) throw new Error('GCAL_TOKEN_KEY secret is not set.');
-  // Accept base64 or hex; must decode to exactly 32 bytes.
+  if (!rawKey) throw new Error('GCAL_TOKEN_KEY is not set.');
   let buf = Buffer.from(rawKey, 'base64');
   if (buf.length !== 32) buf = Buffer.from(rawKey, 'hex');
   if (buf.length !== 32) {

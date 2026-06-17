@@ -10,8 +10,21 @@ export default [
       '**/test-results/**',
       'apps/web/vendor/**',
       'docs/**',
-      'functions/**',
     ],
+  },
+  {
+    files: ['api/**/*.js'],
+    ...js.configs.recommended,
+    languageOptions: {
+      ...js.configs.recommended.languageOptions,
+      ecmaVersion: 'latest',
+      sourceType: 'commonjs',
+      globals: globals.node,
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-console': 'off',
+    },
   },
   {
     files: ['scripts/**/*.mjs', 'tests/**/*.mjs'],

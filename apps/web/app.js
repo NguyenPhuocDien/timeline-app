@@ -775,7 +775,7 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       // Register SW
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker
-          .register('./sw.js?v=23', { updateViaCache: 'none' })
+          .register('./sw.js?v=24', { updateViaCache: 'none' })
           .catch(err => console.warn('[SW]', err));
       }
     }
@@ -873,8 +873,8 @@ const $ = s => document.querySelector(s); const $$ = s => Array.from(document.qu
       });
 
       // Google Calendar (Phase 2): khi gcal.js cập nhật token/lịch/sự kiện → re-render
-      // nếu đang ở tab Lịch (sự kiện Google chỉ hiển thị trong tab này).
-      const onGcalChange = () => { if (currentTab === 'calendar') render(); };
+      // nếu đang ở tab Lịch hoặc Timeline (hai nơi hiển thị sự kiện Google).
+      const onGcalChange = () => { if (currentTab === 'calendar' || currentTab === 'timeline') render(); };
       document.addEventListener('gcal-state-change', onGcalChange);
       document.addEventListener('gcal-events-change', onGcalChange);
     }
@@ -1186,6 +1186,7 @@ ${commandCenter}
       const remainBarEl = $('#ins-remainBar'); if (remainBarEl) remainBarEl.style.width = (100 - pct(s.dayPct)) + '%';
     }
     function renderTimeline(full = true) {
+      ensureGcalForCurrentView();
       const tasks = activeDayTasks().filter(t => t.start && t.end);
       const overlaps = findOverlaps(tasks);
       const hourH = getHourHeight();
@@ -1204,6 +1205,19 @@ ${commandCenter}
           <div class="meta">${t.start}-${t.end} · ${t.duration}m ${t.mission ? '· Việc chính' : ''}</div>
         </div>`;
       }).join('');
+      // Sự kiện Google Calendar (read-only) phủ lên cùng lưới giờ — khóa, không sửa được.
+      const gEvents = gcalEventsOnDay(selectedDate);
+      const gBlocks = gEvents.filter(ev => !ev.allDay && ev.start).map(ev => {
+        const s = minOf(ev.start), e = ev.end ? minOf(ev.end) : (s + 60);
+        const top = (s / 60) * hourH;
+        const height = Math.max(28, ((Math.max(e, s + 30) - s) / 60) * hourH - 4);
+        return `<div class="tblock gcalItem" style="top:${top}px;height:${height}px;--cal:${esc(ev.color)}" title="Google: ${esc(ev.title)} · ${esc(ev.start)}${ev.end ? '-' + esc(ev.end) : ''}" onclick="openGcalEvent('${esc(ev.gcalId)}','${esc(selectedDate)}')">
+          <div class="name"><span class="gcalLock" aria-hidden="true">🔒</span>${esc(ev.title)}</div>
+          <div class="meta">${esc(ev.start)}${ev.end ? '-' + esc(ev.end) : ''} · Google</div>
+        </div>`;
+      }).join('');
+      const gAllDay = gEvents.filter(ev => ev.allDay);
+      const gAllDayRow = gAllDay.length ? `<div class="timelineAllDay">${gAllDay.map(gcalChipHTML).join('')}</div>` : '';
       const uns = activeDayTasks().filter(t => !t.start || !t.end);
       const scheduledMins = tasks.reduce((sum, t) => sum + Math.max(0, (minOf(t.end) || 0) - (minOf(t.start) || 0)), 0);
       const freeMins = Math.max(0, availableRemainMins(selectedDate) - scheduledMins);
@@ -1222,7 +1236,8 @@ ${commandCenter}
               <span class="pill">Free: ${durText(freeMins)}</span>
               <span class="pill ${overlaps.size ? 'dangerText' : ''}">Overlap: ${overlaps.size}</span>
             </div>
-            <div class="timelineWrap" id="timelineWrap" onclick="timelineClick(event)">${hours}${line}${blocks}</div>
+            ${gAllDayRow}
+            <div class="timelineWrap" id="timelineWrap" onclick="timelineClick(event)">${hours}${line}${blocks}${gBlocks}</div>
           </div>
           <div class="card"><h3>Chưa xếp giờ</h3><div class="list">${uns.length ? uns.map(t => taskMini(t)).join('') : '<div class="muted">Không có task chưa xếp giờ.</div>'}</div></div>
         </div>`;
@@ -1770,16 +1785,21 @@ ${commandCenter}
       }
       return { timeMin: start.toISOString(), timeMax: end.toISOString() };
     }
+    // Khoảng [min, max) của riêng ngày đang chọn (cho tab Timeline).
+    function dayRangeISO() {
+      const start = startOfDay(parseDate(selectedDate));
+      return { timeMin: start.toISOString(), timeMax: addDays(start, 1).toISOString() };
+    }
     let gcalFetchTimer = null;
     // Fetch sự kiện Google cho khoảng của view hiện tại (debounce để tránh spam API
     // khi user đổi view/tháng liên tục). gcal.js tự bỏ qua nếu khoảng đã có cache.
     function ensureGcalForCurrentView() {
       if (!gcalConnected() || typeof window.gcalEnsureEvents !== 'function') return;
-      if (currentTab !== 'calendar') return;
+      if (currentTab !== 'calendar' && currentTab !== 'timeline') return;
       if (gcalFetchTimer) clearTimeout(gcalFetchTimer);
       gcalFetchTimer = setTimeout(() => {
         gcalFetchTimer = null;
-        const { timeMin, timeMax } = calViewRangeISO();
+        const { timeMin, timeMax } = currentTab === 'timeline' ? dayRangeISO() : calViewRangeISO();
         window.gcalEnsureEvents(timeMin, timeMax).catch(() => { /* lỗi đã toast trong gcal.js */ });
       }, 250);
     }
@@ -1894,10 +1914,22 @@ ${commandCenter}
         const tasks = dayTasks(fd).filter(t => isCalendarVisible(t.calendarId));
         const dayEvents = eventsOnDay(fd);
         const gEvents = gcalEventsOnDay(fd);
-        const eventDots = dayEvents.slice(0, 4).map(e => `<span class="dot" title="${esc(e.title)}" style="background:${calendarColor(e.calendarId)}"></span>`).join('');
-        const taskDots = tasks.slice(0, 6).map(t => `<span class="dot" title="${esc(t.title)}" style="background:${t.calendarId ? calendarColor(t.calendarId) : (t.status === 'done' ? 'var(--ok)' : t.status === 'stack' ? 'var(--warn)' : 'var(--brand2)')}"></span>`).join('');
-        const gcalDots = gEvents.slice(0, 4).map(e => `<span class="dot gcalDot" title="Google: ${esc(e.title)}" style="background:${esc(e.color)}"></span>`).join('');
-        days += `<div class="day ${x.getMonth() !== d.getMonth() ? 'off' : ''} ${fd === selectedDate ? 'sel' : ''}" onclick="selectCalendarDay('${fd}')" ondblclick="openTask(null,{date:'${fd}'})"><div class="num">${x.getDate()}</div><div class="dots">${eventDots}${taskDots}${gcalDots}</div><div class="small muted">${tasks.length ? `${tasks.filter(t => t.status === 'done').length}/${tasks.length} done` : ''}</div></div>`;
+        // Gộp event app + task + sự kiện Google thành chip có tiêu đề ngắn (nhìn là biết việc gì).
+        const items = [
+          ...dayEvents.map(e => ({ title: e.title, color: calendarColor(e.calendarId), kind: 'event' })),
+          ...tasks.map(t => ({
+            title: t.title,
+            color: t.calendarId ? calendarColor(t.calendarId) : (t.status === 'done' ? 'var(--ok)' : t.status === 'stack' ? 'var(--warn)' : 'var(--brand2)'),
+            kind: 'task', done: t.status === 'done',
+          })),
+          ...gEvents.map(e => ({ title: e.title, color: e.color, kind: 'gcal' })),
+        ];
+        const MAX_CHIPS = 3;
+        const chips = items.slice(0, MAX_CHIPS).map(it =>
+          `<span class="mEvt ${it.done ? 'done' : ''} ${it.kind === 'gcal' ? 'gcalItem' : ''}" style="--cal:${esc(String(it.color))}" title="${it.kind === 'gcal' ? 'Google: ' : ''}${esc(it.title)}">${it.kind === 'gcal' ? '<span class="gcalLock" aria-hidden="true">🔒</span>' : ''}${esc(it.title)}</span>`
+        ).join('');
+        const more = items.length > MAX_CHIPS ? `<span class="mMore">+${items.length - MAX_CHIPS}</span>` : '';
+        days += `<div class="day ${x.getMonth() !== d.getMonth() ? 'off' : ''} ${fd === selectedDate ? 'sel' : ''}" onclick="selectCalendarDay('${fd}')" ondblclick="openTask(null,{date:'${fd}'})"><div class="num">${x.getDate()}</div><div class="mEvts">${chips}${more}</div></div>`;
       }
       return `<div class="calendar">${DOW_LABELS.map(x => `<div class="dow">${x}</div>`).join('')}${days}</div>`;
     }

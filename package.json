@@ -1,7 +1,7 @@
 {
   "name": "timeline-app",
   "version": "1.0.0",
-  "appVersion": 23,
+  "appVersion": 24,
   "private": true,
   "description": "Timeline Focus monorepo",
   "packageManager": "npm@11.13.0",
@@ -26,6 +26,10 @@
     "test:e2e:headed": "npm run test:e2e:headed --workspace @timeline/web",
     "release:gate": "node scripts/release-gate.mjs",
     "turbo": "turbo"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.0.0",
+    "googleapis": "^173.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

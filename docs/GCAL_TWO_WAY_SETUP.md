@@ -4,18 +4,18 @@
 > Quyết định 2026-06-17. Trạng thái: **Pha 0 (hạ tầng)**.
 
 ## Quyết định đã chốt
-- **Backend:** Firebase Cloud Functions (project `timeline-app-9a872`).
+- **Backend:** Vercel serverless functions tại `/api/gcal` (KHÔNG dùng Firebase Cloud Functions → không cần Blaze). Firebase Admin SDK chạy trong function bằng service account để truy cập Firestore/Auth.
 - **Đồng bộ:** app `events` + `tasks` có ngày/giờ ↔ Google. Task chưa có giờ → không đẩy.
 - **Lịch đích:** một calendar Google riêng tên **"Timeline Focus"** (không ghi vào primary).
 
 ## Kiến trúc
 ```
-App (PWA) ──đọc/ghi──► Firestore ──Firestore trigger──► Cloud Function ──► Google Calendar   [App → Google]
-Google Calendar ──webhook──► Cloud Function ──► Firestore ──onSnapshot──► App                [Google → App]
+App (PWA) ──ghi──► Firestore ──gọi──► /api/gcal/push (Vercel) ──► Google Calendar   [App → Google]
+Google Calendar ──webhook──► /api/gcal/webhook (Vercel) ──► Firestore ──onSnapshot──► App   [Google → App]
 ```
-- App **không gọi thẳng** Google API nữa — chỉ làm việc với Firestore. Backend là cầu nối.
-- OAuth phía server (`access_type=offline`) → refresh token, mã hoá lưu Firestore.
-- Chống loop: mỗi event Google do app tạo gắn `extendedProperties.private.tlfId`; mapping lưu ở `gcal_links`.
+- **Vercel không có Firestore trigger** → sau khi ghi Firestore, app **chủ động gọi** `/api/gcal/push`. Cần hàng đợi/đối soát cho trường hợp ghi offline.
+- OAuth phía server (`access_type=offline`) → refresh token, mã hoá AES-256-GCM lưu Firestore (`gcal_tokens`, chỉ server đọc qua Admin SDK).
+- Chống loop: mỗi event Google do app tạo gắn `extendedProperties.private.tlfId`; mapping lưu ở `gcal_links` (client đọc được để đối soát, chỉ server ghi).
 
 ## Firestore collections mới
 | Collection | Nội dung | Ai đọc/ghi |
@@ -34,20 +34,24 @@ Google Calendar ──webhook──► Cloud Function ──► Firestore ──
 
 ## ✅ CHECKLIST PHA 0 — việc của bạn (chỉ bạn làm được)
 
-1. **Bật Blaze (pay-as-you-go)**
-   - Firebase Console → project `timeline-app-9a872` → ⚙️ → Usage and billing → Modify plan → **Blaze**.
-   - Gắn thẻ. Free tier rất rộng → dùng cá nhân gần như 0đ. (Có thể đặt **budget alert** để yên tâm.)
-
-2. **Tạo OAuth 2.0 Client ID (loại Web application)**
+1. **Tạo OAuth 2.0 Client ID (loại Web application)**
    - Google Cloud Console → APIs & Services → Credentials → Create credentials → OAuth client ID → **Web application**.
-   - **Authorized redirect URI:** sẽ là URL Cloud Function OAuth callback — mình sẽ cung cấp URL chính xác ở đầu Pha 1 (dạng `https://<region>-timeline-app-9a872.cloudfunctions.net/gcalOauthCallback`). Tạm tạo client trước, dán redirect URI sau.
-   - Lưu lại **Client ID** + **Client secret** → đừng commit; sẽ nạp qua Firebase secret.
+   - **Authorized redirect URI:** `https://<domain-app>/api/gcal/callback`
+     (ví dụ `https://timeline-app-one-beta.vercel.app/api/gcal/callback`).
+   - Lưu lại **Client ID** + **Client secret** → đừng commit.
 
-3. **Thêm scope ghi vào OAuth consent screen**
+2. **Thêm scope ghi vào OAuth consent screen**
    - APIs & Services → OAuth consent screen → Edit → Scopes → thêm
      `https://www.googleapis.com/auth/calendar.events`
    - Giữ consent ở **Testing**; đảm bảo tài khoản Google bạn dùng nằm trong **Test users**.
 
-4. **Xác nhận với tôi khi xong** + gửi **Client ID** (Client secret sẽ nạp bằng `firebase functions:secrets:set`, không dán vào chat).
+3. **Nạp 4 biến môi trường vào Vercel** (Project → Settings → Environment Variables):
+   - `GCAL_CLIENT_ID` — Client ID ở bước 1
+   - `GCAL_CLIENT_SECRET` — Client secret ở bước 1
+   - `GCAL_TOKEN_KEY` — khoá mã hoá refresh token, sinh bằng `openssl rand -base64 32`
+   - `FIREBASE_SERVICE_ACCOUNT` — JSON service account (raw hoặc base64) của project `timeline-app-9a872`
+   - (tuỳ chọn) `APP_BASE_URL` — origin cố định nếu không muốn suy ra từ header request.
 
-> Sau khi Pha 0 xong, tôi khởi tạo `functions/`, dựng OAuth callback, và đưa bạn redirect URI để dán vào client.
+4. **Xác nhận với tôi khi xong.** Secret không dán vào chat — chỉ cần báo đã nạp xong trên Vercel.
+
+> Backend `/api/gcal` đã có sẵn (auth-url, callback, OAuth, mã hoá token, ensure calendar). Sau khi Pha 0 xong là chạy được luồng kết nối (Pha 1).

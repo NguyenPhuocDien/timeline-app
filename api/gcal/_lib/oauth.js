@@ -3,20 +3,23 @@
 /**
  * Google OAuth2 helpers (server-side, offline access for a refresh token).
  *
- * Secrets required at runtime (set with `firebase functions:secrets:set`):
- *   GCAL_CLIENT_ID, GCAL_CLIENT_SECRET, GCAL_TOKEN_KEY
+ * Env vars required at runtime (Vercel project settings):
+ *   GCAL_CLIENT_ID, GCAL_CLIENT_SECRET, GCAL_TOKEN_KEY, FIREBASE_SERVICE_ACCOUNT
  */
 const { google } = require('googleapis');
 const { SCOPES } = require('./config');
 
-/**
- * The callback URL must EXACTLY match an Authorized redirect URI on the OAuth
- * client. With 2nd-gen functions in REGION, it looks like:
- *   https://<REGION>-<projectId>.cloudfunctions.net/gcalOauthCallback
- * We pass it in explicitly so there is one source of truth.
- */
 function makeOAuthClient({ clientId, clientSecret, redirectUri }) {
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+}
+
+/** Build a client from env, primed for the given redirect URI. */
+function clientFromEnv(redirectUri) {
+  return makeOAuthClient({
+    clientId: process.env.GCAL_CLIENT_ID,
+    clientSecret: process.env.GCAL_CLIENT_SECRET,
+    redirectUri,
+  });
 }
 
 function buildConsentUrl(oauthClient, state) {
@@ -32,17 +35,19 @@ function buildConsentUrl(oauthClient, state) {
 /** Exchange the authorization code for tokens (includes refresh_token). */
 async function exchangeCode(oauthClient, code) {
   const { tokens } = await oauthClient.getToken(code);
-  return tokens; // { access_token, refresh_token, expiry_date, scope, ... }
+  return tokens;
 }
 
 /** Build a client already primed with a stored refresh token. */
-function clientWithRefreshToken(base, refreshToken) {
-  base.setCredentials({ refresh_token: refreshToken });
-  return base;
+function clientWithRefreshToken(redirectUri, refreshToken) {
+  const client = clientFromEnv(redirectUri);
+  client.setCredentials({ refresh_token: refreshToken });
+  return client;
 }
 
 module.exports = {
   makeOAuthClient,
+  clientFromEnv,
   buildConsentUrl,
   exchangeCode,
   clientWithRefreshToken,
